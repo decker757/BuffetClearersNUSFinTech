@@ -348,7 +348,7 @@ export function Marketplace({ userPublicKey, userRole }: { userPublicKey: string
           {/* Cards Grid */}
           {filteredAndSortedAuctions.length === 0 ? (
             <div className="text-center py-12">
-              <p className="text-gray-400 text-lg">No auctions available at the moment.</p>
+              <p className="text-gray-400 text-lg">No listings available at the moment.</p>
               <p className="text-gray-500 text-sm mt-2">Check back later for new listings!</p>
             </div>
           ) : (
