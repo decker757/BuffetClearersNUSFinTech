@@ -1,189 +1,217 @@
-XRPL Invoice Auction Platform
-Turning future payments into tradable on‑chain assets
+# XRPL Invoice NFT Auction Platform
+**Tokenizing future invoices into tradable on-chain assets**
 
-TL;DR
-This MVP demonstrates how the XRP Ledger (XRPL) can be used to tokenize, auction, and settle future payment receivables using native XRPL features such as NFTs, issued tokens, trustlines, wallet‑based authentication, and escrow.
+---
 
-Businesses can convert future invoices into immediate liquidity, while investors acquire payment rights at a discount — with ownership and settlement handled on‑chain.
+## TL;DR
+This MVP demonstrates how the **XRP Ledger (XRPL)** can be used to tokenize, auction, and settle future invoice payments using **native XRPL features only** — including NFTs (NFToken), issued tokens (RLUSD-style mock), trustlines, wallet-based authentication, and escrow.
 
-The Problem
-Small and medium businesses frequently wait 30–90 days to receive payment after issuing invoices.
+Businesses convert unpaid invoices into immediate liquidity, while investors acquire future payment rights at a discount — with ownership and settlement transparently handled on-chain.
+
+---
+
+## The Problem
+Small and medium businesses often wait **30–90 days** to receive payment after issuing invoices.
+
 During this period:
+- Cash flow is constrained  
+- Financing options are centralized and opaque  
+- Settlement lacks transparency  
 
-Cash flow is constrained
+---
 
-Financing options are centralized and opaque
-
-Settlement lacks transparency
-
-The Idea
-We represent a future payment (invoice / receivable) as an NFT on XRPL.
+## The Idea
+A **future payment (invoice / receivable)** is represented as an **NFT on XRPL**.
 
 The NFT represents:
-
-the right to receive a fixed payment amount from a specific payer at a future date
+- The right to receive a **fixed payment amount**
+- From a **specific payer**
+- At a **future maturity date**
 
 This NFT can be auctioned on a marketplace, allowing:
+- Sellers to receive liquidity immediately  
+- Investors to acquire future payment rights  
+- Settlement to be enforced economically on-chain once funded  
 
-The seller to receive liquidity immediately
+This follows the **invoice factoring** economic model, implemented using XRPL primitives.
 
-The buyer to acquire the future payment right
+---
 
-Settlement to be enforced economically on‑chain when funded
+## High-Level Flow
+1. An establishment mints an **Invoice NFT** representing a future payment  
+2. The NFT is listed on an **auction marketplace** with a defined expiry  
+3. Investors place bids using an **issued stable token** (RLUSD-style, testnet/mock)  
+4. At auction close, **payment and NFT transfer are coordinated** (DVP-style)  
+5. Post-auction, the payer may **fund escrow** to guarantee settlement (demo flow)  
 
-High‑Level Flow
-A business mints an Invoice NFT representing a future payment
+---
 
-The NFT is listed for auction on the platform
+## XRPL Features Used
+This project is intentionally built using **XRPL native primitives**, without general-purpose smart contracts.
 
-Investors bid using an issued stable token (XSGD – mock)
+### XRPL Primitives
+- NFTs (`NFToken`)
+- Issued Tokens (RLUSD-style mock)
+- Trustlines
+- Escrow
+- Wallet-based authentication
 
-The highest bidder pays and receives the NFT
+---
 
-At maturity, settlement is enforced via XRPL escrow (demo flow)
+## XRPL Transactions Used
+- `NFTokenMint`
+- `TrustSet`
+- `Payment`
+- `EscrowCreate`
+- `EscrowFinish`
 
-XRPL Features Used
-This project is intentionally built using XRPL native primitives, without general‑purpose smart contracts.
+---
 
-1. XRPL NFTs (NFToken)
-Each invoice is minted as an NFT
+## Architecture Overview
 
-NFT metadata includes:
+### On-Chain (XRPL = Source of Truth)
+- NFT existence and ownership  
+- Issued token balances  
+- Escrowed funds  
+- Transaction history  
 
-Invoice ID
+### Off-Chain (Application & Backend)
+- Auction timing and expiry  
+- Marketplace listings  
+- Wallet authentication  
+- Role-based dashboards  
+- Coordination of XRPL transactions  
 
-Payer organization
+**Private keys are never stored or transmitted.**
 
-Face value
+---
 
-Maturity date
+## Wallet Authentication Flow
+1. Client requests a unique challenge  
+2. Client signs it using an XRPL wallet (client-side)  
+3. Server verifies signature  
+4. Server issues short-lived JWT  
 
-Platform identifier
+No passwords. No custody. No personal data.
 
-NFT ownership determines who is entitled to payment
+---
 
-2. Issued Tokens (XSGD – mock)
-A mock XSGD issued token is used for bidding and settlement
+## Tech Stack
 
-Demonstrates XRPL’s issued currency model
+### Frontend
+- React + TypeScript  
+- Tailwind CSS v4  
 
-Enables stable, fiat‑denominated value transfer
+### Backend
+- Supabase (PostgreSQL, RLS)  
+- Public-key authentication  
+- Auction indexing  
 
-3. Trustlines
-Participants establish trustlines to the XSGD issuer
+### Blockchain
+- XRP Ledger (XRPL Testnet)  
+- NFTs, Issued Tokens, Trustlines, Escrow  
 
-Required before receiving issued tokens
+---
 
-Demonstrates XRPL’s permissioned token mechanics
+## Setup
 
-4. XRPL Escrow
-Escrow is used to demonstrate on‑chain settlement
+### Prerequisites
+- Node.js 16+  
+- Supabase account  
 
-Once funded, payment is cryptographically enforced by XRPL
-
-Illustrates how settlement risk can be removed post‑auction
-
-5. Wallet‑Based Authentication
-Users authenticate by proving control of an XRPL wallet
-
-No usernames, passwords, or custodial accounts
-
-Authentication uses a cryptographic challenge‑response flow
-
-Architecture Overview
-On‑Chain (XRPL = Source of Truth)
-NFT existence and ownership
-
-Issued token balances
-
-Escrowed funds
-
-Transaction history
-
-Off‑Chain (Backend = Coordination Layer)
-Auction timing and state
-
-NFT discovery index
-
-Wallet authentication
-
-API orchestration
-
-The backend never controls user funds or private keys.
-
-Wallet Authentication Flow
-Authentication is wallet‑native, not account‑based.
-
-Client requests a unique challenge message
-
-Client signs the message with their XRPL wallet (client‑side only)
-
-Server verifies the signature against the public address
-
-Server issues a short‑lived JWT for API access
-
-This ensures:
-
-No personal data storage
-
-No password management
-
-No custodial wallet behavior
-
-Setup
-Install dependencies
+### Installation
+```bash
+git clone https://github.com/YOUR_USERNAME/YOUR_REPO.git
+cd YOUR_REPO
 npm install
-Configure environment variables
+```
+
+### Environment Variables
+```env
+VITE_SUPABASE_URL=your_supabase_project_url
+VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
 XRPL_NETWORK=wss://s.altnet.rippletest.net:51233
-BAKERY_SEED=your_testnet_seed
-INVESTOR_SEED=your_testnet_seed
-HOTEL_SEED=your_testnet_seed
-JWT_SECRET=your_jwt_secret
-PORT=6767
-(Optional) Generate testnet wallets
-node scripts/generateWallets.js
-Running the Server
-Development
+```
+
+---
+
+## Database Schema
+```sql
+CREATE TABLE "USER" (
+  publicKey TEXT PRIMARY KEY,
+  username TEXT UNIQUE NOT NULL,
+  role TEXT CHECK (role IN ('investor', 'establishment')) NOT NULL
+);
+
+CREATE TABLE "NFTOKEN" (
+  nftoken_id TEXT PRIMARY KEY,
+  created_by TEXT REFERENCES "USER"(publicKey),
+  invoice_number TEXT,
+  face_value NUMERIC,
+  maturity_date TIMESTAMP,
+  current_owner TEXT REFERENCES "USER"(publicKey),
+  platform TEXT
+);
+
+CREATE TABLE "AUCTIONLISTING" (
+  aid SERIAL PRIMARY KEY,
+  nftoken_id TEXT REFERENCES "NFTOKEN"(nftoken_id),
+  expiry TIMESTAMP,
+  min_bid NUMERIC,
+  current_bid NUMERIC,
+  status TEXT DEFAULT 'OPEN'
+);
+
+CREATE TABLE "AUCTIONBIDS" (
+  bid_id SERIAL PRIMARY KEY,
+  aid INTEGER REFERENCES "AUCTIONLISTING"(aid),
+  bid_amount NUMERIC,
+  bid_by TEXT REFERENCES "USER"(publicKey),
+  created_at TIMESTAMP DEFAULT NOW()
+);
+```
+
+---
+
+## Running the App
+```bash
 npm run dev
-Production
-npm start
-API Overview (Excerpt)
-POST /auth/challenge
-Requests a wallet authentication challenge.
+```
 
-POST /auth/verify
-Verifies wallet signature and issues a JWT.
+---
 
-Additional endpoints handle:
+## Usage
 
-Invoice NFT minting
+### Investors
+- Authenticate with XRPL wallet  
+- Browse invoice auctions  
+- Place bids using issued tokens  
+- Receive Invoice NFTs  
 
-Auction coordination
+### Establishments
+- Authenticate with XRPL wallet  
+- Mint invoice NFTs  
+- List invoices for auction  
+- Receive immediate liquidity  
 
-Trustline setup
+---
 
-XRPL transaction orchestration
+## Business Model
+- Invoice factoring  
+- Future receivables sold at discount  
+- Investors receive payment at maturity  
 
-Scope & Disclaimer
-This project is a technical MVP demonstrating receivable tokenization and settlement mechanics.
+Returns are **not guaranteed**.  
+Credit risk exists until escrow is funded.
 
-NFTs represent commercial claims, not legal obligations
+---
 
-The XRP Ledger enforces transactions, not contracts
+## Scope & Disclaimer
+This is a **technical MVP**.
 
-Legal enforceability would be handled via off‑chain agreements in a production system
+- NFTs represent economic claims, not legal contracts  
+- XRPL enforces transactions, not legal obligations  
+- Legal enforceability is out of scope  
+- Not a lending platform  
 
-The platform facilitates receivable trading, not lending
-
-Why XRPL
-XRPL was selected because it provides:
-
-Native NFT support
-
-Built‑in escrow
-
-Issued token mechanics
-
-Fast finality and low transaction fees
-
-These properties make XRPL particularly suitable for payment‑centric financial primitives such as invoices and receivables.
+---
