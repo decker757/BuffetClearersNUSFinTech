@@ -23,7 +23,7 @@ export function Marketplace({ userPublicKey, userRole }: { userPublicKey: string
   const [priceFilter, setPriceFilter] = useState('lowest');
   const [likesFilter, setLikesFilter] = useState('most-bids');
   const [creatorFilter, setCreatorFilter] = useState('verified');
-  const [priceRange, setPriceRange] = useState([0, 30000]);
+  const [priceRange, setPriceRange] = useState([0, 200000]);
   const [selectedAuction, setSelectedAuction] = useState<AuctionListingWithNFT | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [userBids, setUserBids] = useState<AuctionBid[]>([]);
@@ -328,8 +328,8 @@ export function Marketplace({ userPublicKey, userRole }: { userPublicKey: string
                       <input
                         type="range"
                         min="0"
-                        max="30000"
-                        step="1000"
+                        max="200000"
+                        step="5000"
                         value={priceRange[1]}
                         onChange={(e) => setPriceRange([priceRange[0], parseInt(e.target.value)])}
                         className="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-600"
