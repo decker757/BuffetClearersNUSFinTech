@@ -3,7 +3,7 @@ import { Wallet, TrendingUp, Package, Eye, Clock, Gavel, CheckCircle, History, C
 import { WonAuctionsSection } from '../won-auctions';
 import { getBidsByUser, getNFTokensByOwner } from '../../lib/database';
 import { AuctionBid, NFToken, AuctionListingWithNFT } from '../../lib/supabase';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 
 interface ActiveBidDisplay {
   bid: AuctionBid;

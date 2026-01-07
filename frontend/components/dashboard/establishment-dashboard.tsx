@@ -5,7 +5,7 @@ import { ListTokenModal } from './list-token-modal';
 import { EstablishmentSettingsModal } from './establishment-settings-modal';
 import { getNFTokensByCreator, getNFTokensByOwner, createNFToken, createAuctionListing, getAuctionListingsByCreator, getBidsByAuction } from '../../lib/database';
 import { NFToken, AuctionListingWithNFT } from '../../lib/supabase';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 
 interface EstablishmentInfo {
   name: string;
