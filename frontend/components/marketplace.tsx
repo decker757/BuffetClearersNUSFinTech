@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { ChevronDown, TrendingUp, Clock, X, Calendar, FileText, Shield, DollarSign, Timer, AlertCircle } from 'lucide-react';
+import { ChevronDown, TrendingUp, Clock, X, Calendar, FileText, Shield, DollarSign, Timer, AlertCircle, Loader2 } from 'lucide-react';
 import { UserRole } from './auth/onboarding';
-import { getActiveAuctionListings, placeBid, getBidsByAuction } from '../lib/database';
+import { getActiveAuctionListings, getBidCountsByAuctions } from '../lib/database';
 import { AuctionListingWithNFT } from '../lib/supabase';
 import { toast } from 'sonner';
+import { placeBidWithEscrow } from '../utils/bidWithEscrow';
 
 export function Marketplace({ userPublicKey, userRole }: { userPublicKey: string | null, userRole: UserRole | null }) {
   const [sortBy, setSortBy] = useState('recently-added');
@@ -15,6 +16,7 @@ export function Marketplace({ userPublicKey, userRole }: { userPublicKey: string
   const [loading, setLoading] = useState(true);
   const [currentTime, setCurrentTime] = useState(Date.now());
   const [bidCounts, setBidCounts] = useState<Record<number, number>>({});
+  const [placingBid, setPlacingBid] = useState(false);
 
   // Update current time every minute for countdown
   useEffect(() => {
@@ -52,11 +54,8 @@ export function Marketplace({ userPublicKey, userRole }: { userPublicKey: string
       }
 
       // Load bid counts for each auction
-      const counts: Record<number, number> = {};
-      for (const listing of listings) {
-        const bids = await getBidsByAuction(listing.aid);
-        counts[listing.aid] = bids.length;
-      }
+      const aids = listings.map(l => l.aid);
+      const counts = await getBidCountsByAuctions(aids);
       setBidCounts(counts);
     } catch (error) {
       console.error('Failed to load auction listings:', error);
@@ -75,18 +74,39 @@ export function Marketplace({ userPublicKey, userRole }: { userPublicKey: string
     if (!confirmationData || !userPublicKey) return;
 
     const { auction, bidAmount } = confirmationData;
-    
+
     try {
-      await placeBid(auction.aid, parseFloat(bidAmount), userPublicKey);
-      toast.success(`Bid placed successfully for ${bidAmount} RLUSD on ${auction.NFTOKEN?.invoice_number || 'NFT'}!`);
-      
-      // Reload data
-      setConfirmationData(null);
-      setSelectedAuction(null);
-      await loadAuctionListings();
+      setPlacingBid(true);
+      toast.loading('Creating RLUSD Check on XRPL...', { id: 'bid-process' });
+
+      // Use the new escrow-based bidding
+      const result = await placeBidWithEscrow(
+        auction.aid.toString(),
+        parseFloat(bidAmount),
+        auction.expiry || new Date().toISOString()
+      );
+
+      if (result.success) {
+        toast.success(
+          `Bid placed successfully! Check created: ${result.data?.checkTxHash.substring(0, 8)}...`,
+          { id: 'bid-process' }
+        );
+
+        // Reload data
+        setConfirmationData(null);
+        setSelectedAuction(null);
+        await loadAuctionListings();
+
+        // Notify dashboard to refresh bids
+        window.dispatchEvent(new CustomEvent('bidsUpdated'));
+      } else {
+        toast.error(result.message, { id: 'bid-process' });
+      }
     } catch (error) {
       console.error('Failed to place bid:', error);
-      toast.error('Failed to place bid. Please try again.');
+      toast.error('Failed to place bid. Please try again.', { id: 'bid-process' });
+    } finally {
+      setPlacingBid(false);
     }
   };
 
@@ -232,13 +252,21 @@ export function Marketplace({ userPublicKey, userRole }: { userPublicKey: string
                     onClick={() => setSelectedAuction(auction)}
                   >
                     {/* NFT Visual */}
-                    <div className={`relative h-64 bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center`}>
-                      <div className="text-center">
-                        <FileText className="w-16 h-16 text-white/80 mx-auto mb-4" />
-                        <p className="text-white/60 text-sm px-4">
-                          {auction.NFTOKEN?.invoice_number || 'Invoice NFT'}
-                        </p>
-                      </div>
+                    <div className={`relative h-64 ${!auction.NFTOKEN?.image_link ? 'bg-gradient-to-br from-blue-600 to-purple-600' : 'bg-gray-800'} flex items-center justify-center overflow-hidden`}>
+                      {auction.NFTOKEN?.image_link ? (
+                        <img
+                          src={auction.NFTOKEN.image_link}
+                          alt={auction.NFTOKEN.invoice_number || 'Invoice NFT'}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="text-center">
+                          <FileText className="w-16 h-16 text-white/80 mx-auto mb-4" />
+                          <p className="text-white/60 text-sm px-4">
+                            {auction.NFTOKEN?.invoice_number || 'Invoice NFT'}
+                          </p>
+                        </div>
+                      )}
                       
                       {/* Status Badge */}
                       {isEndingSoon && (
@@ -255,7 +283,7 @@ export function Marketplace({ userPublicKey, userRole }: { userPublicKey: string
                         <div>
                           <h3 className="text-white mb-1">{auction.NFTOKEN?.invoice_number || 'Invoice NFT'}</h3>
                           <p className="text-gray-400 text-sm">
-                            Issuer: {auction.NFTOKEN?.created_by?.substring(0, 8)}...
+                            Issuer: {auction.NFTOKEN?.creator_username || 'Unknown'}
                           </p>
                         </div>
                         <Shield className="w-5 h-5 text-blue-400" />
@@ -321,6 +349,7 @@ export function Marketplace({ userPublicKey, userRole }: { userPublicKey: string
           bidAmount={confirmationData.bidAmount}
           onConfirm={handleConfirmBid}
           onCancel={() => setConfirmationData(null)}
+          isPlacingBid={placingBid}
         />
       )}
     </div>
@@ -386,12 +415,20 @@ function AuctionDetailModal({
 
         <div className="p-6">
           {/* NFT Visual */}
-          <div className={`relative h-64 bg-gradient-to-br from-blue-600 to-purple-600 rounded-xl flex items-center justify-center mb-6`}>
-            <div className="text-center">
-              <FileText className="w-20 h-20 text-white/80 mx-auto mb-4" />
-              <p className="text-white text-lg">{auction.NFTOKEN?.invoice_number || 'Invoice NFT'}</p>
-              <p className="text-white/60 text-sm mt-2">Token ID: {auction.NFTOKEN?.nftoken_id?.substring(0, 16)}...</p>
-            </div>
+          <div className={`relative h-64 ${!auction.NFTOKEN?.image_link ? 'bg-gradient-to-br from-blue-600 to-purple-600' : 'bg-gray-800'} rounded-xl flex items-center justify-center mb-6 overflow-hidden`}>
+            {auction.NFTOKEN?.image_link ? (
+              <img
+                src={auction.NFTOKEN.image_link}
+                alt={auction.NFTOKEN.invoice_number || 'Invoice NFT'}
+                className="w-full h-full object-cover rounded-xl"
+              />
+            ) : (
+              <div className="text-center">
+                <FileText className="w-20 h-20 text-white/80 mx-auto mb-4" />
+                <p className="text-white text-lg">{auction.NFTOKEN?.invoice_number || 'Invoice NFT'}</p>
+                <p className="text-white/60 text-sm mt-2">Token ID: {auction.NFTOKEN?.nftoken_id?.substring(0, 16)}...</p>
+              </div>
+            )}
           </div>
 
           {/* Details Grid */}
@@ -451,7 +488,7 @@ function AuctionDetailModal({
               <Shield className="w-4 h-4" />
               <span className="text-sm">Issuer</span>
             </div>
-            <p className="text-white font-mono text-sm">{auction.NFTOKEN?.created_by}</p>
+            <p className="text-white text-sm">{auction.NFTOKEN?.creator_username || 'Unknown'}</p>
           </div>
 
           {/* Place Bid Form (only for investors) */}
@@ -517,12 +554,14 @@ function BidConfirmationModal({
   auction,
   bidAmount,
   onConfirm,
-  onCancel
+  onCancel,
+  isPlacingBid
 }: {
   auction: AuctionListingWithNFT;
   bidAmount: string;
   onConfirm: () => void;
   onCancel: () => void;
+  isPlacingBid: boolean;
 }) {
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" onClick={onCancel}>
@@ -549,6 +588,19 @@ function BidConfirmationModal({
             </div>
           </div>
 
+          <div className="bg-amber-950/30 border border-amber-900/50 rounded-lg p-4 mb-6">
+            <div className="flex items-start gap-2">
+              <AlertCircle className="w-5 h-5 text-amber-400 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-amber-400 text-sm font-medium mb-1">XRPL Check</p>
+                <p className="text-gray-400 text-xs">
+                  Your bid will create a Check on XRPL for the RLUSD amount.
+                  Ensure you maintain sufficient balance until auction settlement.
+                </p>
+              </div>
+            </div>
+          </div>
+
           <p className="text-gray-400 text-sm mb-6">
             By confirming this bid, you agree to purchase this invoice NFT if you win the auction at maturity for the bid amount.
           </p>
@@ -556,15 +608,24 @@ function BidConfirmationModal({
           <div className="flex gap-3">
             <button
               onClick={onCancel}
-              className="flex-1 px-4 py-3 border border-gray-700 text-gray-300 rounded-lg hover:bg-gray-800 transition-colors"
+              disabled={isPlacingBid}
+              className="flex-1 px-4 py-3 border border-gray-700 text-gray-300 rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Cancel
             </button>
             <button
               onClick={onConfirm}
-              className="flex-1 px-4 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:opacity-90 transition-opacity"
+              disabled={isPlacingBid}
+              className="flex-1 px-4 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
-              Confirm Bid
+              {isPlacingBid ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Creating Escrow...
+                </>
+              ) : (
+                'Confirm Bid'
+              )}
             </button>
           </div>
         </div>

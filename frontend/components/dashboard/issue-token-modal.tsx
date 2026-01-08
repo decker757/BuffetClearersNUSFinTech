@@ -56,6 +56,12 @@ export function IssueTokenModal({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
+    // Validate that user is not creating an invoice to themselves
+    if (formData.creditorPublicKey === currentUserPublicKey) {
+      toast.error('You cannot create an invoice to yourself. Please select a different creditor.');
+      return;
+    }
+
     // Find the selected establishment to get their username
     const selectedEstablishment = establishments.find(
       est => est.publicKey === formData.creditorPublicKey

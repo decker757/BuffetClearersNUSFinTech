@@ -38,6 +38,7 @@ export interface User {
 export interface NFToken {
   nftoken_id: string;
   created_by: string | null;
+  creator_username?: string; // Username of creator (populated by backend)
   invoice_number: string | null;
   face_value: number | null;
   image_link: string | null;
@@ -54,6 +55,9 @@ export interface AuctionListing {
   min_bid: number | null;
   current_bid: number | null;
   time_created: string; // timestamp with time zone
+  original_owner?: string | null; // Who listed this NFT
+  platform_holds_nft?: boolean | null;
+  status?: string | null;
 }
 
 export interface AuctionBid {

@@ -27,7 +27,13 @@ export async function findNFTSellOffers(nftokenId: string): Promise<any[]> {
     console.error('❌ Error finding NFT sell offers:', error);
     console.error('   Error code:', error?.data?.error);
     console.error('   Error message:', error?.data?.error_message);
-    console.error('   Full error:', JSON.stringify(error, null, 2));
+
+    // If objectNotFound, it means no offers exist - return empty array instead of throwing
+    if (error?.data?.error === 'objectNotFound') {
+      console.log('ℹ️  No sell offers found for this NFT');
+      return [];
+    }
+
     throw new Error(error?.data?.error_message || error?.message || 'Failed to find NFT sell offers');
   } finally {
     await client.disconnect();

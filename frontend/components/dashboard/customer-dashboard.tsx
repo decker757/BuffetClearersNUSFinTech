@@ -1,15 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Wallet, TrendingUp, Package, Eye, Clock, Gavel, CheckCircle, History, CreditCard, Timer } from 'lucide-react';
-import { WonAuctionsSection } from '../won-auctions';
+import { Wallet, TrendingUp, Package, Gavel, CheckCircle, History, Timer } from 'lucide-react';
 import { getBidsByUser, getNFTokensByOwner } from '../../lib/database';
-import { AuctionBid, NFToken, AuctionListingWithNFT } from '../../lib/supabase';
+import { AuctionBid, NFToken } from '../../lib/supabase';
 import { toast } from 'sonner';
-
-interface ActiveBidDisplay {
-  bid: AuctionBid;
-  listing: AuctionListingWithNFT | null;
-  nftoken: NFToken | null;
-}
 
 export function CustomerDashboard({ 
   username,
@@ -38,6 +31,20 @@ export function CustomerDashboard({
   // Load data on mount
   useEffect(() => {
     loadDashboardData();
+  }, [publicKey]);
+
+  // Listen for bid updates
+  useEffect(() => {
+    const handleBidsUpdated = () => {
+      console.log('Bids updated event received, refreshing dashboard...');
+      loadDashboardData();
+    };
+
+    window.addEventListener('bidsUpdated', handleBidsUpdated);
+
+    return () => {
+      window.removeEventListener('bidsUpdated', handleBidsUpdated);
+    };
   }, [publicKey]);
 
   const loadDashboardData = async () => {
@@ -321,8 +328,8 @@ export function CustomerDashboard({
                           </div>
                           <div>
                             <div className="text-sm text-gray-400 mb-1">Issuer</div>
-                            <div className="text-white text-sm font-mono">
-                              {nftoken?.created_by?.substring(0, 16)}...
+                            <div className="text-white text-sm">
+                              {nftoken?.creator_username || 'Unknown'}
                             </div>
                           </div>
                         </div>

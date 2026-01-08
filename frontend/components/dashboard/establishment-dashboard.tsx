@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Plus, FileText, Package, Eye, Settings, X, Shield, Timer, TrendingUp } from 'lucide-react';
+import { Plus, FileText, Package, Settings, Timer, TrendingUp } from 'lucide-react';
 import { IssueTokenModal } from './issue-token-modal';
 import { ListTokenModal } from './list-token-modal';
 import { EstablishmentSettingsModal } from './establishment-settings-modal';
 import { AcceptNFTModal } from './accept-nft-modal';
-import { getNFTokensByCreator, getNFTokensByOwner, createNFToken, createAuctionListing, getAuctionListingsByCreator, getBidsByAuction } from '../../lib/database';
+import { getNFTokensByCreator, getNFTokensByOwner, getAuctionListingsByOwner, getBidsByAuction } from '../../lib/database';
 import { NFToken, AuctionListingWithNFT } from '../../lib/supabase';
 import { mintInvoiceNFT, authenticatedFetch } from '../../lib/api';
 import { findNFTSellOffers, acceptNFTOffer, createSellOfferToPlatform } from '../../lib/xrpl-nft';
@@ -91,7 +91,7 @@ export function EstablishmentDashboard({
 
   const loadAuctionListings = async () => {
     try {
-      const listings = await getAuctionListingsByCreator(publicKey);
+      const listings = await getAuctionListingsByOwner(publicKey);
       setAuctionListings(listings);
 
       // Load bid counts for each listing
@@ -267,7 +267,7 @@ export function EstablishmentDashboard({
       console.log('🔄 Starting NFT acceptance process');
       console.log('  NFToken ID:', nftokenId);
 
-      // Get the NFT details from our database to see what we have stored
+      // Get the NFT details from our database
       const nft = ownedTokens.find(t => t.nftoken_id === nftokenId);
       console.log('  NFT from database:', nft);
 
@@ -327,7 +327,7 @@ export function EstablishmentDashboard({
     }
   };
 
-  const handleCancelAuction = async (tokenId: string) => {
+  const handleCancelAuction = async (_tokenId: string) => {
     // TODO: Implement cancel auction functionality
     toast.info('Cancel auction feature coming soon');
   };
@@ -534,10 +534,15 @@ export function EstablishmentDashboard({
                       <div>
                         <div className="text-sm text-gray-400 mb-1">Status</div>
                         <span className={`inline-block px-2 py-1 rounded text-xs ${
-                          !isListed ? 'bg-gray-700 text-gray-300' :
-                          'bg-green-950/50 text-green-400 border border-green-900/50'
+                          token.current_state === 'issued' ? 'bg-yellow-950/50 text-yellow-400 border border-yellow-900/50' :
+                          token.current_state === 'owned' ? 'bg-blue-950/50 text-blue-400 border border-blue-900/50' :
+                          token.current_state === 'listed' ? 'bg-green-950/50 text-green-400 border border-green-900/50' :
+                          'bg-gray-700 text-gray-300'
                         }`}>
-                          {isListed ? 'listed' : 'issued'}
+                          {token.current_state === 'issued' ? 'Pending Acceptance' :
+                           token.current_state === 'owned' ? 'Owned' :
+                           token.current_state === 'listed' ? 'Listed on Auction' :
+                           token.current_state}
                         </span>
                       </div>
                     </div>
@@ -663,7 +668,7 @@ export function EstablishmentDashboard({
       {showAcceptModal && selectedToken && (
         <AcceptNFTModal
           nftokenId={selectedToken.nftoken_id}
-          invoiceNumber={selectedToken.invoice_number}
+          invoiceNumber={selectedToken.invoice_number || 'Unknown Invoice'}
           onClose={() => {
             setShowAcceptModal(false);
             setSelectedToken(null);
