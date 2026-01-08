@@ -114,7 +114,7 @@ export async function getNFTokensByOwner(publicKey: string) {
     .from('NFTOKEN')
     .select('*')
     .eq('current_owner', publicKey)
-    .eq('current_state', 'issued') // CRITICAL: Only show successfully minted NFTs
+    .in('current_state', ['issued', 'owned']) // Show NFTs that are issued (pending acceptance) or owned (accepted)
     .order('nftoken_id', { ascending: false });
 
   if (error) throw error;

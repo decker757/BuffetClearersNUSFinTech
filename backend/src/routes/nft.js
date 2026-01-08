@@ -1,5 +1,5 @@
 import express from 'express';
-import { mintInvoiceNFT, getNFTDetails } from '../controllers/nftController.js';
+import { mintInvoiceNFT, getNFTDetails, verifyNFTOwnership } from '../controllers/nftController.js';
 import { authenticateToken } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -15,6 +15,13 @@ router.post('/mint', (req, res, next) => {
   console.log('Headers:', req.headers);
   next();
 }, authenticateToken, mintInvoiceNFT);
+
+/**
+ * POST /nft/verify-ownership
+ * Verify NFT ownership transfer and update state to 'owned'
+ * Protected route - requires authentication
+ */
+router.post('/verify-ownership', authenticateToken, verifyNFTOwnership);
 
 /**
  * GET /nft/:nftokenId

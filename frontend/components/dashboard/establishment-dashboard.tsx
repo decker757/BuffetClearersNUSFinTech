@@ -3,9 +3,11 @@ import { Plus, FileText, Package, Eye, Settings, X, Shield, Timer, TrendingUp } 
 import { IssueTokenModal } from './issue-token-modal';
 import { ListTokenModal } from './list-token-modal';
 import { EstablishmentSettingsModal } from './establishment-settings-modal';
+import { AcceptNFTModal } from './accept-nft-modal';
 import { getNFTokensByCreator, getNFTokensByOwner, createNFToken, createAuctionListing, getAuctionListingsByCreator, getBidsByAuction } from '../../lib/database';
 import { NFToken, AuctionListingWithNFT } from '../../lib/supabase';
-import { mintInvoiceNFT } from '../../lib/api';
+import { mintInvoiceNFT, authenticatedFetch } from '../../lib/api';
+import { findNFTSellOffers, acceptNFTOffer } from '../../lib/xrpl-nft';
 import { toast } from 'sonner';
 
 interface EstablishmentInfo {
@@ -25,6 +27,7 @@ export function EstablishmentDashboard({
   const [showIssueModal, setShowIssueModal] = useState(false);
   const [showListModal, setShowListModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showAcceptModal, setShowAcceptModal] = useState(false);
   const [selectedToken, setSelectedToken] = useState<NFToken | null>(null);
   const [currentTime, setCurrentTime] = useState(Date.now());
   
@@ -205,6 +208,76 @@ export function EstablishmentDashboard({
     setShowListModal(true);
   };
 
+  const handleOpenAcceptModal = (token: NFToken) => {
+    setSelectedToken(token);
+    setShowAcceptModal(true);
+  };
+
+  const handleAcceptNFT = async (nftokenId: string, walletSeed: string) => {
+    try {
+      console.log('🔄 Starting NFT acceptance process');
+      console.log('  NFToken ID:', nftokenId);
+
+      // Get the NFT details from our database to see what we have stored
+      const nft = ownedTokens.find(t => t.nftoken_id === nftokenId);
+      console.log('  NFT from database:', nft);
+
+      // Find sell offers for this NFT
+      console.log('  Querying XRPL for sell offers...');
+      const offers = await findNFTSellOffers(nftokenId);
+
+      if (!offers || offers.length === 0) {
+        throw new Error('No sell offers found for this NFT. The offer may have expired or been cancelled.');
+      }
+
+      console.log('📋 Found sell offers:', offers);
+
+      // Use the first offer (should be the one from platform)
+      const offer = offers[0];
+      const offerIndex = offer.nft_offer_index;
+
+      console.log('✅ Accepting offer:', offerIndex);
+
+      // Accept the offer on-chain
+      const result = await acceptNFTOffer({
+        nftokenId,
+        offerIndex,
+        walletSeed
+      });
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to accept NFT offer on-chain');
+      }
+
+      console.log('✅ NFT accepted on-chain! TX Hash:', result.txHash);
+
+      // Notify backend to verify and update NFT state to 'owned'
+      const response = await authenticatedFetch('/nft/verify-ownership', {
+        method: 'POST',
+        body: JSON.stringify({
+          nftokenId,
+          txHash: result.txHash
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to verify ownership with backend');
+      }
+
+      toast.success('NFT ownership accepted successfully! You can now list it on auction.');
+      setShowAcceptModal(false);
+      setSelectedToken(null);
+
+      // Reload data to update the UI
+      await loadAllData();
+
+    } catch (error) {
+      console.error('Failed to accept NFT:', error);
+      throw error; // Re-throw so modal can display error
+    }
+  };
+
   const handleCancelAuction = async (tokenId: string) => {
     // TODO: Implement cancel auction functionality
     toast.info('Cancel auction feature coming soon');
@@ -292,7 +365,7 @@ export function EstablishmentDashboard({
               <div className="text-sm text-gray-400">Total Receivables</div>
             </div>
             <div className="text-3xl text-white">{totalOwnedValue.toLocaleString()} RLUSD</div>
-            <div className="text-xs text-gray-500 mt-1">{ownedTokens.length} tokens owned</div>
+            <div className="text-xs text-gray-500 mt-1">{ownedTokens.length} receivables</div>
           </div>
 
           <div className="p-6 bg-gray-900 border border-gray-800 rounded-xl">
@@ -370,13 +443,13 @@ export function EstablishmentDashboard({
           )}
         </div>
 
-        {/* Owned Tokens Section */}
+        {/* Receivables Section */}
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
           <div className="mb-6">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-2xl text-white mb-2">Tokens I Own</h2>
-                <p className="text-sm text-gray-400">Receivables - invoice NFTs from establishments that owe you money (auctionable)</p>
+                <h2 className="text-2xl text-white mb-2">Receivables</h2>
+                <p className="text-sm text-gray-400">Invoice NFTs from establishments that owe you money. Accept pending NFTs to take ownership, then list on auction for early liquidity.</p>
               </div>
             </div>
           </div>
@@ -456,7 +529,26 @@ export function EstablishmentDashboard({
                       </div>
                     )}
 
-                    {!isListed && (
+                    {!isListed && token.current_state === 'issued' && (
+                      <div className="pt-4 border-t border-gray-700">
+                        <div className="p-4 bg-yellow-950/30 border border-yellow-900/50 rounded-lg mb-3">
+                          <p className="text-sm text-yellow-400 mb-2">
+                            <strong>Pending Acceptance</strong>
+                          </p>
+                          <p className="text-xs text-gray-400">
+                            This NFT has been minted for you. Accept it to take ownership on-chain before you can list it on auction.
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => handleOpenAcceptModal(token)}
+                          className="px-4 py-2 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-lg hover:opacity-90 transition-opacity text-sm"
+                        >
+                          Accept NFT Ownership
+                        </button>
+                      </div>
+                    )}
+
+                    {!isListed && token.current_state === 'owned' && (
                       <div className="pt-4 border-t border-gray-700">
                         <button
                           onClick={() => handleOpenListModal(token)}
@@ -492,7 +584,8 @@ export function EstablishmentDashboard({
           ) : (
             <div className="text-center py-12">
               <Package className="w-16 h-16 text-gray-700 mx-auto mb-4" />
-              <p className="text-gray-400">No tokens owned yet</p>
+              <p className="text-gray-400">No receivables yet</p>
+              <p className="text-xs text-gray-500 mt-2">Receivables will appear here when other establishments issue invoices to you</p>
             </div>
           )}
         </div>
@@ -503,6 +596,7 @@ export function EstablishmentDashboard({
         <IssueTokenModal
           onClose={() => setShowIssueModal(false)}
           onIssue={handleIssueToken}
+          currentUserPublicKey={publicKey}
         />
       )}
 
@@ -514,6 +608,18 @@ export function EstablishmentDashboard({
             setSelectedToken(null);
           }}
           onList={handleListToken}
+        />
+      )}
+
+      {showAcceptModal && selectedToken && (
+        <AcceptNFTModal
+          nftokenId={selectedToken.nftoken_id}
+          invoiceNumber={selectedToken.invoice_number}
+          onClose={() => {
+            setShowAcceptModal(false);
+            setSelectedToken(null);
+          }}
+          onAccept={handleAcceptNFT}
         />
       )}
 

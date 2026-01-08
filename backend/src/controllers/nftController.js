@@ -5,6 +5,7 @@ import { generateMetadataJSON, validateMetadata } from '../services/metadataServ
 import { uploadImageToStorage, uploadMetadataToStorage, downloadImageAsBuffer } from '../services/storageService.js';
 import { mintAndTransferNFT } from '../services/nftMintingService.js';
 import { deriveAddress } from 'ripple-keypairs';
+import { connectXRPL } from '../config/xrplClient.js';
 
 /**
  * Complete flow: Mint NFT with image generation and metadata
@@ -227,6 +228,123 @@ export async function getNFTDetails(req, res) {
     return res.status(500).json({
       success: false,
       error: 'Failed to fetch NFT details',
+      message: error.message
+    });
+  }
+}
+
+/**
+ * Verify NFT ownership transfer and update state to 'owned'
+ * Called by creditor after accepting the NFT offer on-chain
+ */
+export async function verifyNFTOwnership(req, res) {
+  try {
+    const { nftokenId, txHash } = req.body;
+    const userPublicKey = req.user.publicKey;
+
+    console.log('\n🔍 Verifying NFT ownership...');
+    console.log('  NFToken ID:', nftokenId);
+    console.log('  TX Hash:', txHash);
+    console.log('  User Public Key:', userPublicKey);
+
+    // Validate inputs
+    if (!nftokenId || !txHash) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: nftokenId, txHash'
+      });
+    }
+
+    // Get NFT from database
+    const { data: nft, error: fetchError } = await supabase
+      .from('NFTOKEN')
+      .select('*')
+      .eq('nftoken_id', nftokenId)
+      .single();
+
+    if (fetchError || !nft) {
+      return res.status(404).json({
+        success: false,
+        error: 'NFT not found in database'
+      });
+    }
+
+    // Verify that the user is the current owner
+    console.log('  🔍 Ownership check:');
+    console.log('    NFT current_owner:', nft.current_owner);
+    console.log('    User publicKey:   ', userPublicKey);
+    console.log('    Match:', nft.current_owner === userPublicKey);
+
+    if (nft.current_owner !== userPublicKey) {
+      return res.status(403).json({
+        success: false,
+        error: 'You are not the owner of this NFT',
+        debug: {
+          nftOwner: nft.current_owner,
+          yourPublicKey: userPublicKey
+        }
+      });
+    }
+
+    // Verify NFT state is 'issued' (pending acceptance)
+    if (nft.current_state !== 'issued') {
+      return res.status(400).json({
+        success: false,
+        error: `NFT is in state '${nft.current_state}', expected 'issued'`
+      });
+    }
+
+    // Verify ownership on-chain
+    console.log('  Verifying on-chain ownership...');
+    const client = await connectXRPL();
+    const userAddress = deriveAddress(userPublicKey);
+
+    const response = await client.request({
+      command: 'account_nfts',
+      account: userAddress
+    });
+
+    const nfts = response.result.account_nfts || [];
+    const ownsNFT = nfts.some((nft) => nft.NFTokenID === nftokenId);
+
+    if (!ownsNFT) {
+      return res.status(400).json({
+        success: false,
+        error: 'NFT ownership not confirmed on-chain. Please try again after transaction is validated.'
+      });
+    }
+
+    console.log('  ✅ On-chain ownership verified!');
+
+    // Update NFT state to 'owned'
+    const { error: updateError } = await supabase
+      .from('NFTOKEN')
+      .update({
+        current_state: 'owned'
+      })
+      .eq('nftoken_id', nftokenId);
+
+    if (updateError) {
+      throw updateError;
+    }
+
+    console.log('  ✅ NFT state updated to "owned"');
+
+    return res.status(200).json({
+      success: true,
+      message: 'NFT ownership verified and state updated to "owned"',
+      data: {
+        nftokenId,
+        newState: 'owned',
+        txHash
+      }
+    });
+
+  } catch (error) {
+    console.error('\n❌ Verify ownership error:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to verify NFT ownership',
       message: error.message
     });
   }

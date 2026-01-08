@@ -64,12 +64,13 @@ export function verifySignature(req, res) {
       // Generate JWT token
       console.log('🔑 Creating JWT token with secret:', JWT_SECRET);
       const token = jwt.sign(
-        { address, timestamp: Date.now() },
+        { address, publicKey, timestamp: Date.now() },
         JWT_SECRET,
         { expiresIn: "24h" }
       );
 
-      console.log('✅ Token created:', token.slice(0, 50) + '...');
+      console.log('✅ Token created with publicKey:', publicKey);
+      console.log('   Token:', token.slice(0, 50) + '...');
 
       res.json({
         success: true,
