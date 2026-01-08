@@ -119,10 +119,7 @@ export async function mintInvoiceNFT(req, res) {
       // Convert creditor's public key to XRPL address
       const creditorAddress = deriveAddress(creditorPublicKey);
       console.log('  Creditor Address:', creditorAddress);
-
-      // Use platform wallet (e.g., bakeryWallet as platform wallet)
-      // In production, you'd have a dedicated platform wallet
-      const platformWallet = bakeryWallet;
+      console.log('  Platform Address:', platformWallet.address);
 
       const mintResult = await mintAndTransferNFT({
         metadataUri,
@@ -508,7 +505,10 @@ export async function listNFTOnAuction(req, res) {
         face_value: nft.face_value,
         expiry: expiry,
         min_bid: minBid,
-        current_bid: minBid
+        current_bid: minBid,
+        original_owner: userPublicKey, // Track who listed this NFT
+        platform_holds_nft: true,
+        status: 'active'
       }])
       .select()
       .single();
