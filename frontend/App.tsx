@@ -14,7 +14,7 @@ import { EstablishmentDashboard } from './components/dashboard/establishment-das
 import { DemoDataGenerator } from './components/demo-data-generator';
 import { useState, useEffect } from 'react';
 import { getUserByPublicKey, createUser } from './lib/database';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { Toaster } from './components/ui/sonner';
 import { isSupabaseConfigured } from './lib/supabase';
 import { AlertCircle } from 'lucide-react';
