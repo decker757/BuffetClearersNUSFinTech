@@ -252,13 +252,21 @@ export function Marketplace({ userPublicKey, userRole }: { userPublicKey: string
                     onClick={() => setSelectedAuction(auction)}
                   >
                     {/* NFT Visual */}
-                    <div className={`relative h-64 bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center`}>
-                      <div className="text-center">
-                        <FileText className="w-16 h-16 text-white/80 mx-auto mb-4" />
-                        <p className="text-white/60 text-sm px-4">
-                          {auction.NFTOKEN?.invoice_number || 'Invoice NFT'}
-                        </p>
-                      </div>
+                    <div className={`relative h-64 ${!auction.NFTOKEN?.image_link ? 'bg-gradient-to-br from-blue-600 to-purple-600' : 'bg-gray-800'} flex items-center justify-center overflow-hidden`}>
+                      {auction.NFTOKEN?.image_link ? (
+                        <img
+                          src={auction.NFTOKEN.image_link}
+                          alt={auction.NFTOKEN.invoice_number || 'Invoice NFT'}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="text-center">
+                          <FileText className="w-16 h-16 text-white/80 mx-auto mb-4" />
+                          <p className="text-white/60 text-sm px-4">
+                            {auction.NFTOKEN?.invoice_number || 'Invoice NFT'}
+                          </p>
+                        </div>
+                      )}
                       
                       {/* Status Badge */}
                       {isEndingSoon && (
@@ -407,12 +415,20 @@ function AuctionDetailModal({
 
         <div className="p-6">
           {/* NFT Visual */}
-          <div className={`relative h-64 bg-gradient-to-br from-blue-600 to-purple-600 rounded-xl flex items-center justify-center mb-6`}>
-            <div className="text-center">
-              <FileText className="w-20 h-20 text-white/80 mx-auto mb-4" />
-              <p className="text-white text-lg">{auction.NFTOKEN?.invoice_number || 'Invoice NFT'}</p>
-              <p className="text-white/60 text-sm mt-2">Token ID: {auction.NFTOKEN?.nftoken_id?.substring(0, 16)}...</p>
-            </div>
+          <div className={`relative h-64 ${!auction.NFTOKEN?.image_link ? 'bg-gradient-to-br from-blue-600 to-purple-600' : 'bg-gray-800'} rounded-xl flex items-center justify-center mb-6 overflow-hidden`}>
+            {auction.NFTOKEN?.image_link ? (
+              <img
+                src={auction.NFTOKEN.image_link}
+                alt={auction.NFTOKEN.invoice_number || 'Invoice NFT'}
+                className="w-full h-full object-cover rounded-xl"
+              />
+            ) : (
+              <div className="text-center">
+                <FileText className="w-20 h-20 text-white/80 mx-auto mb-4" />
+                <p className="text-white text-lg">{auction.NFTOKEN?.invoice_number || 'Invoice NFT'}</p>
+                <p className="text-white/60 text-sm mt-2">Token ID: {auction.NFTOKEN?.nftoken_id?.substring(0, 16)}...</p>
+              </div>
+            )}
           </div>
 
           {/* Details Grid */}

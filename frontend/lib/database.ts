@@ -114,7 +114,7 @@ export async function getNFTokensByOwner(publicKey: string) {
     .from('NFTOKEN')
     .select('*')
     .eq('current_owner', publicKey)
-    .eq('current_state', 'issued') // CRITICAL: Only show successfully minted NFTs
+    .in('current_state', ['issued', 'owned', 'listed']) // Show NFTs: issued (pending), owned (accepted), listed (on auction)
     .order('nftoken_id', { ascending: false });
 
   if (error) throw error;
@@ -246,6 +246,21 @@ export async function getAuctionListingsByCreator(publicKey: string) {
   return data as AuctionListingWithNFT[];
 }
 
+export async function getAuctionListingsByOwner(publicKey: string) {
+  checkSupabaseConfig();
+  const { data, error } = await supabase
+    .from('AUCTIONLISTING')
+    .select(`
+      *,
+      NFTOKEN (*)
+    `)
+    .eq('original_owner', publicKey) // Get auctions where user is the lister
+    .order('time_created', { ascending: false});
+
+  if (error) throw error;
+  return data as AuctionListingWithNFT[];
+}
+
 export async function updateAuctionListing(aid: number, updates: Partial<AuctionListing>) {
   checkSupabaseConfig();
   const { data, error } = await supabase
@@ -351,6 +366,18 @@ export async function getHighestBidForAuction(aid: number) {
     throw error;
   }
   return data as AuctionBid;
+}
+
+export async function getBidsByAuction(aid: number) {
+  checkSupabaseConfig();
+  const { data, error } = await supabase
+    .from('AUCTIONBIDS')
+    .select('*')
+    .eq('aid', aid)
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  return data as AuctionBid[];
 }
 
 export async function getAllBids() {

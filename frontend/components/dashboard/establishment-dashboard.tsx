@@ -1,12 +1,17 @@
 import { useState, useEffect } from 'react';
-import { Plus, FileText, Package, Eye, Settings, X, Shield, Timer, TrendingUp } from 'lucide-react';
+import { Plus, FileText, Package, Settings, Timer, TrendingUp } from 'lucide-react';
 import { IssueTokenModal } from './issue-token-modal';
 import { ListTokenModal } from './list-token-modal';
 import { EstablishmentSettingsModal } from './establishment-settings-modal';
-import { getNFTokensByCreator, getNFTokensByOwner, createNFToken, createAuctionListing, getAuctionListingsByCreator, getBidCountsByAuctions } from '../../lib/database';
+import { AcceptNFTModal } from './accept-nft-modal';
+import { getNFTokensByCreator, getNFTokensByOwner, getAuctionListingsByOwner, getBidsByAuction } from '../../lib/database';
 import { NFToken, AuctionListingWithNFT } from '../../lib/supabase';
-import { mintInvoiceNFT } from '../../lib/api';
+import { mintInvoiceNFT, authenticatedFetch } from '../../lib/api';
+import { findNFTSellOffers, acceptNFTOffer, createSellOfferToPlatform } from '../../lib/xrpl-nft';
 import { toast } from 'sonner';
+
+// Platform wallet address from backend
+const PLATFORM_ADDRESS = 'rJoESWx9ZKHpEyNrLWBTA95XLxwoKJj59u';
 
 interface EstablishmentInfo {
   name: string;
@@ -25,6 +30,7 @@ export function EstablishmentDashboard({
   const [showIssueModal, setShowIssueModal] = useState(false);
   const [showListModal, setShowListModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showAcceptModal, setShowAcceptModal] = useState(false);
   const [selectedToken, setSelectedToken] = useState<NFToken | null>(null);
   const [currentTime, setCurrentTime] = useState(Date.now());
   
@@ -85,14 +91,16 @@ export function EstablishmentDashboard({
 
   const loadAuctionListings = async () => {
     try {
-      const listings = await getAuctionListingsByCreator(publicKey);
+      const listings = await getAuctionListingsByOwner(publicKey);
       setAuctionListings(listings);
 
       // Load bid counts for each listing
-      const aids = listings.map(l => l.aid);
-      const counts = await getBidCountsByAuctions(aids);
+      const counts: Record<string, number> = {};
+      for (const listing of listings) {
+        const bids = await getBidsByAuction(listing.aid);
+        counts[listing.nftoken_id || ''] = bids.length;
+      }
       setBidCounts(counts);
-
     } catch (error) {
       console.error('Failed to load auction listings:', error);
     }
@@ -171,30 +179,76 @@ export function EstablishmentDashboard({
     }
   };
 
-  const handleListToken = async (tokenId: string, listingPrice: number, auctionExpiry: string) => {
+  const handleListToken = async (tokenId: string, minBid: number, auctionExpiry: string, walletSeed: string) => {
     try {
+      console.log('🔄 Starting NFT listing process');
+      console.log('  NFToken ID:', tokenId);
+      console.log('  Min Bid:', minBid);
+      console.log('  Expiry:', auctionExpiry);
+
       const token = ownedTokens.find(t => t.nftoken_id === tokenId);
       if (!token) {
         toast.error('Token not found');
         return;
       }
 
-      // Create auction listing
-      await createAuctionListing({
-        nftoken_id: tokenId,
-        face_value: token.face_value,
-        expiry: auctionExpiry,
-        min_bid: listingPrice,
-        current_bid: listingPrice
+      // Show loading toast
+      const loadingToast = toast.loading('Creating sell offer to platform...');
+
+      // Step 1: Create sell offer to platform (user signs transaction)
+      console.log('  Creating sell offer to platform...');
+      const offerResult = await createSellOfferToPlatform({
+        nftokenId: tokenId,
+        walletSeed,
+        platformAddress: PLATFORM_ADDRESS
       });
 
-      toast.success('Token listed on auction successfully!');
+      if (!offerResult.success || !offerResult.offerIndex) {
+        toast.dismiss(loadingToast);
+        throw new Error(offerResult.error || 'Failed to create sell offer');
+      }
+
+      console.log('✅ Sell offer created! Offer Index:', offerResult.offerIndex);
+      toast.dismiss(loadingToast);
+
+      // Step 2: Send to backend for platform to accept
+      const loadingToast2 = toast.loading('Platform accepting offer and listing on auction...');
+
+      // Convert date string to ISO format with time
+      const expiryDate = new Date(auctionExpiry);
+      expiryDate.setHours(23, 59, 59, 999); // End of day
+      const expiryISO = expiryDate.toISOString();
+
+      const response = await authenticatedFetch('/nft/list-on-auction', {
+        method: 'POST',
+        body: JSON.stringify({
+          nftokenId: tokenId,
+          offerIndex: offerResult.offerIndex,
+          minBid,
+          expiry: expiryISO
+        })
+      });
+
+      toast.dismiss(loadingToast2);
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to list NFT on auction');
+      }
+
+      const result = await response.json();
+      console.log('✅ NFT listed on auction:', result);
+
+      toast.success('NFT listed on auction successfully! Platform has custody.');
       setShowListModal(false);
       setSelectedToken(null);
+
+      // Reload data to update the UI
       await loadAllData();
+
     } catch (error) {
       console.error('Failed to list token:', error);
-      toast.error('Failed to list token. Please try again.');
+      toast.error(`Failed to list token: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
 
@@ -203,7 +257,77 @@ export function EstablishmentDashboard({
     setShowListModal(true);
   };
 
-  const handleCancelAuction = async (tokenId: string) => {
+  const handleOpenAcceptModal = (token: NFToken) => {
+    setSelectedToken(token);
+    setShowAcceptModal(true);
+  };
+
+  const handleAcceptNFT = async (nftokenId: string, walletSeed: string) => {
+    try {
+      console.log('🔄 Starting NFT acceptance process');
+      console.log('  NFToken ID:', nftokenId);
+
+      // Get the NFT details from our database
+      const nft = ownedTokens.find(t => t.nftoken_id === nftokenId);
+      console.log('  NFT from database:', nft);
+
+      // Find sell offers for this NFT
+      console.log('  Querying XRPL for sell offers...');
+      const offers = await findNFTSellOffers(nftokenId);
+
+      if (!offers || offers.length === 0) {
+        throw new Error('No sell offers found for this NFT. The offer may have expired or been cancelled.');
+      }
+
+      console.log('📋 Found sell offers:', offers);
+
+      // Use the first offer (should be the one from platform)
+      const offer = offers[0];
+      const offerIndex = offer.nft_offer_index;
+
+      console.log('✅ Accepting offer:', offerIndex);
+
+      // Accept the offer on-chain
+      const result = await acceptNFTOffer({
+        nftokenId,
+        offerIndex,
+        walletSeed
+      });
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to accept NFT offer on-chain');
+      }
+
+      console.log('✅ NFT accepted on-chain! TX Hash:', result.txHash);
+
+      // Notify backend to verify and update NFT state to 'owned'
+      const response = await authenticatedFetch('/nft/verify-ownership', {
+        method: 'POST',
+        body: JSON.stringify({
+          nftokenId,
+          txHash: result.txHash
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to verify ownership with backend');
+      }
+
+      toast.success('NFT ownership accepted successfully! You can now list it on auction.');
+      setShowAcceptModal(false);
+      setSelectedToken(null);
+
+      // Reload data to update the UI
+      await loadAllData();
+
+    } catch (error) {
+      console.error('Failed to accept NFT:', error);
+      throw error; // Re-throw so modal can display error
+    }
+  };
+
+  const handleCancelAuction = async (_tokenId: string) => {
     // TODO: Implement cancel auction functionality
     toast.info('Cancel auction feature coming soon');
   };
@@ -290,7 +414,7 @@ export function EstablishmentDashboard({
               <div className="text-sm text-gray-400">Total Receivables</div>
             </div>
             <div className="text-3xl text-white">{totalOwnedValue.toLocaleString()} RLUSD</div>
-            <div className="text-xs text-gray-500 mt-1">{ownedTokens.length} tokens owned</div>
+            <div className="text-xs text-gray-500 mt-1">{ownedTokens.length} receivables</div>
           </div>
 
           <div className="p-6 bg-gray-900 border border-gray-800 rounded-xl">
@@ -368,13 +492,13 @@ export function EstablishmentDashboard({
           )}
         </div>
 
-        {/* Owned Tokens Section */}
+        {/* Receivables Section */}
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
           <div className="mb-6">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-2xl text-white mb-2">Tokens I Own</h2>
-                <p className="text-sm text-gray-400">Receivables - invoice NFTs from establishments that owe you money (auctionable)</p>
+                <h2 className="text-2xl text-white mb-2">Receivables</h2>
+                <p className="text-sm text-gray-400">Invoice NFTs from establishments that owe you money. Accept pending NFTs to take ownership, then list on auction for early liquidity.</p>
               </div>
             </div>
           </div>
@@ -410,10 +534,15 @@ export function EstablishmentDashboard({
                       <div>
                         <div className="text-sm text-gray-400 mb-1">Status</div>
                         <span className={`inline-block px-2 py-1 rounded text-xs ${
-                          !isListed ? 'bg-gray-700 text-gray-300' :
-                          'bg-green-950/50 text-green-400 border border-green-900/50'
+                          token.current_state === 'issued' ? 'bg-yellow-950/50 text-yellow-400 border border-yellow-900/50' :
+                          token.current_state === 'owned' ? 'bg-blue-950/50 text-blue-400 border border-blue-900/50' :
+                          token.current_state === 'listed' ? 'bg-green-950/50 text-green-400 border border-green-900/50' :
+                          'bg-gray-700 text-gray-300'
                         }`}>
-                          {isListed ? 'listed' : 'issued'}
+                          {token.current_state === 'issued' ? 'Pending Acceptance' :
+                           token.current_state === 'owned' ? 'Owned' :
+                           token.current_state === 'listed' ? 'Listed on Auction' :
+                           token.current_state}
                         </span>
                       </div>
                     </div>
@@ -454,7 +583,26 @@ export function EstablishmentDashboard({
                       </div>
                     )}
 
-                    {!isListed && (
+                    {!isListed && token.current_state === 'issued' && (
+                      <div className="pt-4 border-t border-gray-700">
+                        <div className="p-4 bg-yellow-950/30 border border-yellow-900/50 rounded-lg mb-3">
+                          <p className="text-sm text-yellow-400 mb-2">
+                            <strong>Pending Acceptance</strong>
+                          </p>
+                          <p className="text-xs text-gray-400">
+                            This NFT has been minted for you. Accept it to take ownership on-chain before you can list it on auction.
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => handleOpenAcceptModal(token)}
+                          className="px-4 py-2 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-lg hover:opacity-90 transition-opacity text-sm"
+                        >
+                          Accept NFT Ownership
+                        </button>
+                      </div>
+                    )}
+
+                    {!isListed && token.current_state === 'owned' && (
                       <div className="pt-4 border-t border-gray-700">
                         <button
                           onClick={() => handleOpenListModal(token)}
@@ -490,7 +638,8 @@ export function EstablishmentDashboard({
           ) : (
             <div className="text-center py-12">
               <Package className="w-16 h-16 text-gray-700 mx-auto mb-4" />
-              <p className="text-gray-400">No tokens owned yet</p>
+              <p className="text-gray-400">No receivables yet</p>
+              <p className="text-xs text-gray-500 mt-2">Receivables will appear here when other establishments issue invoices to you</p>
             </div>
           )}
         </div>
@@ -501,6 +650,7 @@ export function EstablishmentDashboard({
         <IssueTokenModal
           onClose={() => setShowIssueModal(false)}
           onIssue={handleIssueToken}
+          currentUserPublicKey={publicKey}
         />
       )}
 
@@ -512,6 +662,18 @@ export function EstablishmentDashboard({
             setSelectedToken(null);
           }}
           onList={handleListToken}
+        />
+      )}
+
+      {showAcceptModal && selectedToken && (
+        <AcceptNFTModal
+          nftokenId={selectedToken.nftoken_id}
+          invoiceNumber={selectedToken.invoice_number || 'Unknown Invoice'}
+          onClose={() => {
+            setShowAcceptModal(false);
+            setSelectedToken(null);
+          }}
+          onAccept={handleAcceptNFT}
         />
       )}
 

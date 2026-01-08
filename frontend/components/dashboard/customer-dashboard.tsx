@@ -1,15 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Wallet, TrendingUp, Package, Eye, Clock, Gavel, CheckCircle, History, CreditCard, Timer } from 'lucide-react';
-import { WonAuctionsSection } from '../won-auctions';
+import { Wallet, TrendingUp, Package, Gavel, CheckCircle, History, Timer } from 'lucide-react';
 import { getBidsByUser, getNFTokensByOwner } from '../../lib/database';
-import { AuctionBid, NFToken, AuctionListingWithNFT } from '../../lib/supabase';
+import { AuctionBid, NFToken } from '../../lib/supabase';
 import { toast } from 'sonner';
-
-interface ActiveBidDisplay {
-  bid: AuctionBid;
-  listing: AuctionListingWithNFT | null;
-  nftoken: NFToken | null;
-}
 
 export function CustomerDashboard({ 
   username,

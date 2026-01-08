@@ -55,6 +55,9 @@ export interface AuctionListing {
   min_bid: number | null;
   current_bid: number | null;
   time_created: string; // timestamp with time zone
+  original_owner?: string | null; // Who listed this NFT
+  platform_holds_nft?: boolean | null;
+  status?: string | null;
 }
 
 export interface AuctionBid {
