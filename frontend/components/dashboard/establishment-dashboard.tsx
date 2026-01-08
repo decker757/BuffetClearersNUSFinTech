@@ -7,7 +7,7 @@ import { AcceptNFTModal } from './accept-nft-modal';
 import { getNFTokensByCreator, getNFTokensByOwner, getAuctionListingsByOwner, getBidsByAuction } from '../../lib/database';
 import { NFToken, AuctionListingWithNFT } from '../../lib/supabase';
 import { mintInvoiceNFT, authenticatedFetch } from '../../lib/api';
-import { findNFTSellOffers, acceptNFTOffer, createSellOfferToPlatform } from '../../lib/xrpl-nft';
+import { findNFTSellOffers, acceptNFTOffer, createSellOfferToPlatform, getNFTOwner } from '../../lib/xrpl-nft';
 import { toast } from 'sonner';
 
 // Platform wallet address from backend
@@ -192,10 +192,22 @@ export function EstablishmentDashboard({
         return;
       }
 
-      // Show loading toast
-      const loadingToast = toast.loading('Creating sell offer to platform...');
+      // Verify on-chain ownership first
+      const loadingToast = toast.loading('Verifying NFT ownership on-chain...');
+      const wallet = await import('xrpl').then(xrpl => xrpl.Wallet.fromSeed(walletSeed));
+      const ownsNFT = await getNFTOwner(tokenId, wallet.address);
+
+      if (!ownsNFT) {
+        toast.dismiss(loadingToast);
+        toast.error('You do not own this NFT on-chain. Please accept the NFT offer first.');
+        return;
+      }
+
+      toast.dismiss(loadingToast);
+      console.log('✅ On-chain ownership verified');
 
       // Step 1: Create sell offer to platform (user signs transaction)
+      const loadingToastOffer = toast.loading('Creating sell offer to platform...');
       console.log('  Creating sell offer to platform...');
       const offerResult = await createSellOfferToPlatform({
         nftokenId: tokenId,
@@ -204,15 +216,15 @@ export function EstablishmentDashboard({
       });
 
       if (!offerResult.success || !offerResult.offerIndex) {
-        toast.dismiss(loadingToast);
+        toast.dismiss(loadingToastOffer);
         throw new Error(offerResult.error || 'Failed to create sell offer');
       }
 
       console.log('✅ Sell offer created! Offer Index:', offerResult.offerIndex);
-      toast.dismiss(loadingToast);
+      toast.dismiss(loadingToastOffer);
 
       // Step 2: Send to backend for platform to accept
-      const loadingToast2 = toast.loading('Platform accepting offer and listing on auction...');
+      const loadingToastBackend = toast.loading('Platform accepting offer and listing on auction...');
 
       // Convert date string to ISO format with time
       const expiryDate = new Date(auctionExpiry);
@@ -229,7 +241,7 @@ export function EstablishmentDashboard({
         })
       });
 
-      toast.dismiss(loadingToast2);
+      toast.dismiss(loadingToastBackend);
 
       if (!response.ok) {
         const errorData = await response.json();
@@ -350,8 +362,9 @@ export function EstablishmentDashboard({
   };
 
   const totalIssuedValue = issuedTokens.reduce((sum, token) => sum + (token.face_value || 0), 0);
-  const totalOwnedValue = ownedTokens.reduce((sum, token) => sum + (token.face_value || 0), 0);
-  const activeAuctionsCount = ownedTokens.filter(t => isTokenListed(t.nftoken_id)).length;
+  const totalOwnedValue = ownedTokens.reduce((sum, token) => sum + (token.face_value || 0), 0) +
+    auctionListings.reduce((sum, listing) => sum + (listing.face_value || 0), 0);
+  const activeAuctionsCount = auctionListings.filter(a => a.status === 'active').length;
 
   if (loading) {
     return (
@@ -414,7 +427,7 @@ export function EstablishmentDashboard({
               <div className="text-sm text-gray-400">Total Receivables</div>
             </div>
             <div className="text-3xl text-white">{totalOwnedValue.toLocaleString()} RLUSD</div>
-            <div className="text-xs text-gray-500 mt-1">{ownedTokens.length} receivables</div>
+            <div className="text-xs text-gray-500 mt-1">{ownedTokens.length + auctionListings.length} receivables</div>
           </div>
 
           <div className="p-6 bg-gray-900 border border-gray-800 rounded-xl">
@@ -503,7 +516,7 @@ export function EstablishmentDashboard({
             </div>
           </div>
 
-          {ownedTokens.length > 0 ? (
+          {(ownedTokens.length > 0 || auctionListings.length > 0) ? (
             <div className="space-y-4">
               {ownedTokens.map((token) => {
                 const isListed = isTokenListed(token.nftoken_id);
@@ -631,6 +644,54 @@ export function EstablishmentDashboard({
                         )}
                       </div>
                     )}
+                  </div>
+                );
+              })}
+
+              {/* Show NFTs listed on auction */}
+              {auctionListings.map((listing) => {
+                const nftId = listing.nftoken_id || '';
+                const bidCount = nftId ? (bidCounts[nftId] || 0) : 0;
+
+                return (
+                  <div key={nftId} className="p-6 bg-gray-800/50 border border-gray-700 rounded-lg">
+                    <div className="mb-3">
+                      <span className="text-xs text-gray-500 font-mono">NFT ID: {nftId}</span>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                      <div>
+                        <div className="text-sm text-gray-400 mb-1">Invoice Number</div>
+                        <div className="text-white font-medium">{listing.NFTOKEN?.invoice_number || `INV-${listing.aid}`}</div>
+                      </div>
+                      <div>
+                        <div className="text-sm text-gray-400 mb-1">Face Value</div>
+                        <div className="text-white">{(listing.face_value || 0).toLocaleString()} RLUSD</div>
+                      </div>
+                      <div>
+                        <div className="text-sm text-gray-400 mb-1">Current Bid</div>
+                        <div className="text-white">{(listing.current_bid || 0).toLocaleString()} RLUSD</div>
+                      </div>
+                      <div>
+                        <div className="text-sm text-gray-400 mb-1">Status</div>
+                        <span className="inline-block px-2 py-1 rounded text-xs bg-green-950/50 text-green-400 border border-green-900/50">
+                          Listed on Auction
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Auction info */}
+                    <div className="mt-4 p-3 bg-gray-900/50 rounded border border-gray-700">
+                      <div className="flex items-center justify-between text-sm">
+                        <div>
+                          <span className="text-gray-400">Auction ends: </span>
+                          <span className="text-white">{listing.expiry ? new Date(listing.expiry).toLocaleString() : 'N/A'}</span>
+                        </div>
+                        <div>
+                          <span className="text-gray-400">Bids: </span>
+                          <span className="text-white">{bidCount}</span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 );
               })}

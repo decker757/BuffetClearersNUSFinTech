@@ -101,7 +101,7 @@ export async function getNFTokensByCreator(publicKey: string) {
     .from('NFTOKEN')
     .select('*')
     .eq('created_by', publicKey)
-    .eq('current_state', 'issued') // Only show successfully minted NFTs
+    .in('current_state', ['issued', 'owned', 'listed']) // Show all valid states
     .order('nftoken_id', { ascending: false });
 
   if (error) throw error;

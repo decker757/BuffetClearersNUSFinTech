@@ -364,14 +364,14 @@ export async function verifyNFTOwnership(req, res) {
 export async function listNFTOnAuction(req, res) {
   try {
     const { nftokenId, offerIndex, minBid, expiry } = req.body;
-    const userPublicKey = req.user.publicKey;
+    const userAddress = req.user.address;
 
     console.log('\n🎯 Starting List NFT on Auction Process');
     console.log('  NFToken ID:', nftokenId);
     console.log('  Offer Index:', offerIndex);
     console.log('  Min Bid:', minBid);
     console.log('  Expiry:', expiry);
-    console.log('  User Public Key:', userPublicKey);
+    console.log('  User Address:', userAddress);
 
     // Validate inputs
     if (!nftokenId || !offerIndex || !minBid || !expiry) {
@@ -397,13 +397,13 @@ export async function listNFTOnAuction(req, res) {
     }
 
     // Verify user is the current owner
-    if (nft.current_owner !== userPublicKey) {
+    if (nft.current_owner !== userAddress) {
       return res.status(403).json({
         success: false,
         error: 'You are not the owner of this NFT',
         debug: {
           nftOwner: nft.current_owner,
-          yourPublicKey: userPublicKey
+          yourAddress: userAddress
         }
       });
     }
@@ -421,7 +421,6 @@ export async function listNFTOnAuction(req, res) {
     // Step 2: Verify NFT is in user's wallet on-chain
     console.log('\n[Step 2] Verifying on-chain ownership...');
     const client = await connectXRPL();
-    const userAddress = deriveAddress(userPublicKey);
 
     const userNFTsResponse = await client.request({
       command: 'account_nfts',
@@ -509,7 +508,7 @@ export async function listNFTOnAuction(req, res) {
         expiry: expiry,
         min_bid: minBid,
         current_bid: minBid,
-        original_owner: userPublicKey, // Track who listed this NFT
+        original_owner: userAddress, // Track who listed this NFT
         platform_holds_nft: true,
         status: 'active'
       }])
