@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 
 export function Marketplace({ userPublicKey, userRole }: { userPublicKey: string | null, userRole: UserRole | null }) {
   const [sortBy, setSortBy] = useState('recently-added');
+  const [maxPrice, setMaxPrice] = useState(200000);
   const [priceRange, setPriceRange] = useState([0, 200000]);
   const [selectedAuction, setSelectedAuction] = useState<AuctionListingWithNFT | null>(null);
   const [confirmationData, setConfirmationData] = useState<{ auction: AuctionListingWithNFT, bidAmount: string } | null>(null);
@@ -38,6 +39,17 @@ export function Marketplace({ userPublicKey, userRole }: { userPublicKey: string
       console.log('Loaded listings:', listings);
       console.log('Number of listings:', listings.length);
       setAuctionListings(listings);
+
+      // Calculate dynamic max price based on highest current bid
+      if (listings.length > 0) {
+        const highestBid = Math.max(...listings.map(l => l.current_bid || 0));
+        // Add 20% headroom and round to nearest 10k
+        const calculatedMax = Math.ceil((highestBid * 1.2) / 10000) * 10000;
+        // Ensure minimum of 200k for better UX
+        const newMaxPrice = Math.max(200000, calculatedMax);
+        setMaxPrice(newMaxPrice);
+        setPriceRange([0, newMaxPrice]);
+      }
 
       // Load bid counts for each auction
       const counts: Record<number, number> = {};
@@ -183,14 +195,14 @@ export function Marketplace({ userPublicKey, userRole }: { userPublicKey: string
                     <input
                       type="range"
                       min="0"
-                      max="200000"
-                      step="5000"
+                      max={maxPrice}
+                      step={Math.max(1000, Math.floor(maxPrice / 100))}
                       value={priceRange[1]}
                       onChange={(e) => setPriceRange([priceRange[0], parseInt(e.target.value)])}
                       className="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-600"
                     />
                   </div>
-                  <span className="text-white text-sm font-medium whitespace-nowrap min-w-[120px] text-right">
+                  <span className="text-white text-sm font-medium whitespace-nowrap min-w-30 text-right">
                     {priceRange[1].toLocaleString()} RLUSD
                   </span>
                 </div>
