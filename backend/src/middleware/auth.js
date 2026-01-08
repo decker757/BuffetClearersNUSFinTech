@@ -22,7 +22,7 @@ export function authenticateToken(req, res, next) {
       console.log('❌ Auth Failed: Invalid token -', err.message);
       return res.status(403).json({ error: "Invalid or expired token" });
     }
-    console.log('✅ Auth Success: User', user.publicKey?.slice(0, 10) + '...');
+    console.log('✅ Auth Success: User', user.address?.slice(0, 10) + '...');
     req.user = user;
     next();
   });

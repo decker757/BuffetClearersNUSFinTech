@@ -76,6 +76,10 @@ export function SignIn({ onSignIn, onNavigateToDemoGenerator }: SignInProps) {
       localStorage.setItem('authToken', token);
       localStorage.setItem('walletAddress', address);
 
+      // Store seed in sessionStorage (DEMO ONLY - cleared when browser closes)
+      // ⚠️ WARNING: Never use this approach in production!
+      sessionStorage.setItem('walletSeed', seed.trim());
+
       toast.success('Authentication successful!');
 
       // Call onSignIn with the wallet's public key (for compatibility with existing flow)

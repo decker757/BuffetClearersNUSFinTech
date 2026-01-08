@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, TrendingUp } from 'lucide-react';
+import { X, TrendingUp, Key } from 'lucide-react';
 import { NFToken } from '../../lib/supabase';
 
 export function ListTokenModal({
@@ -9,16 +9,17 @@ export function ListTokenModal({
 }: {
   token: NFToken;
   onClose: () => void;
-  onList: (tokenId: string, listingPrice: number, auctionExpiry: string) => void;
+  onList: (tokenId: string, listingPrice: number, auctionExpiry: string, walletSeed: string) => void;
 }) {
   const [formData, setFormData] = useState({
     listingPrice: '',
-    auctionExpiry: ''
+    auctionExpiry: '',
+    walletSeed: ''
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onList(token.nftoken_id, parseFloat(formData.listingPrice), formData.auctionExpiry);
+    onList(token.nftoken_id, parseFloat(formData.listingPrice), formData.auctionExpiry, formData.walletSeed);
   };
 
   const discountPercentage = formData.listingPrice && token.face_value
@@ -111,9 +112,28 @@ export function ListTokenModal({
               </p>
             </div>
 
+            <div>
+              <label htmlFor="walletSeed" className="block text-sm text-gray-400 mb-2 flex items-center gap-2">
+                <Key className="w-4 h-4" />
+                Your Wallet Seed *
+              </label>
+              <input
+                id="walletSeed"
+                type="password"
+                value={formData.walletSeed}
+                onChange={(e) => setFormData({ ...formData, walletSeed: e.target.value })}
+                placeholder="sEdV..."
+                className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-600 transition-colors font-mono"
+                required
+              />
+              <p className="mt-2 text-xs text-gray-500">
+                Required to sign the transaction and transfer NFT custody to platform
+              </p>
+            </div>
+
             <div className="p-4 bg-blue-950/30 border border-blue-900/50 rounded-lg">
               <p className="text-sm text-blue-400">
-                <strong>Note:</strong> Your token will be listed on the marketplace. Investors will bid to purchase your invoice NFT for immediate liquidity.
+                <strong>Note:</strong> Your NFT will be transferred to the platform wallet for escrow. Once listed, investors can bid to purchase your invoice NFT for immediate liquidity.
               </p>
             </div>
           </div>

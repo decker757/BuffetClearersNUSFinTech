@@ -14,10 +14,12 @@ interface Token {
 
 export function IssueTokenModal({
   onClose,
-  onIssue
+  onIssue,
+  currentUserPublicKey
 }: {
   onClose: () => void;
   onIssue: (token: Token) => void;
+  currentUserPublicKey: string;
 }) {
   const [formData, setFormData] = useState({
     invoiceNumber: '',
@@ -35,8 +37,10 @@ export function IssueTokenModal({
       try {
         setLoadingEstablishments(true);
         const users = await getAllUsers();
-        // Filter only establishment role users
-        const establishmentUsers = users.filter(user => user.role === 'establishment');
+        // Filter only establishment role users AND exclude current user
+        const establishmentUsers = users.filter(
+          user => user.role === 'establishment' && user.publicKey !== currentUserPublicKey
+        );
         setEstablishments(establishmentUsers);
       } catch (error) {
         console.error('Failed to fetch establishments:', error);
@@ -47,10 +51,16 @@ export function IssueTokenModal({
     };
 
     fetchEstablishments();
-  }, []);
+  }, [currentUserPublicKey]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Validate that user is not creating an invoice to themselves
+    if (formData.creditorPublicKey === currentUserPublicKey) {
+      toast.error('You cannot create an invoice to yourself. Please select a different creditor.');
+      return;
+    }
 
     // Find the selected establishment to get their username
     const selectedEstablishment = establishments.find(

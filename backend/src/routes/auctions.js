@@ -5,7 +5,9 @@ import {
   getAuctionById,
   getAuctionBids,
   getUserBids,
-  placeBid
+  placeBid,
+  finalizeAuctionManually,
+  processAllExpiredAuctions
 } from '../controllers/auctionController.js';
 import { authenticateToken } from '../middleware/auth.js';
 
@@ -13,12 +15,19 @@ const router = express.Router();
 
 // Public routes (no auth required)
 router.get('/auctions', getActiveAuctions);
+
+// Protected routes (auth required) - must come before :id routes to avoid conflicts
+router.get('/auctions/user/bids', authenticateToken, getUserBids);
+router.post('/auctions', authenticateToken, createAuction);
+
+// Public and protected routes with :id parameter - must come after specific paths
 router.get('/auctions/:id', getAuctionById);
 router.get('/auctions/:id/bids', getAuctionBids);
-
-// Protected routes (auth required)
-router.post('/auctions', authenticateToken, createAuction);
 router.post('/auctions/:id/bids', authenticateToken, placeBid);
-router.get('/user/bids', authenticateToken, getUserBids);
+
+// Admin/testing routes for manual finalization
+// In production, these should have additional admin authentication
+router.post('/auctions/:id/finalize', authenticateToken, finalizeAuctionManually);
+router.post('/auctions/process-expired', authenticateToken, processAllExpiredAuctions);
 
 export default router;

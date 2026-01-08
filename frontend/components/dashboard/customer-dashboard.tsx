@@ -1,15 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Wallet, TrendingUp, Package, Eye, Clock, Gavel, CheckCircle, History, CreditCard, Timer } from 'lucide-react';
-import { WonAuctionsSection } from '../won-auctions';
+import { Wallet, TrendingUp, Package, Gavel, CheckCircle, History, Timer } from 'lucide-react';
 import { getBidsByUser, getNFTokensByOwner } from '../../lib/database';
-import { AuctionBid, NFToken, AuctionListingWithNFT } from '../../lib/supabase';
+import { AuctionBid, NFToken } from '../../lib/supabase';
 import { toast } from 'sonner';
-
-interface ActiveBidDisplay {
-  bid: AuctionBid;
-  listing: AuctionListingWithNFT | null;
-  nftoken: NFToken | null;
-}
 
 export function CustomerDashboard({ 
   username,
@@ -40,6 +33,20 @@ export function CustomerDashboard({
     loadDashboardData();
   }, [publicKey]);
 
+  // Listen for bid updates
+  useEffect(() => {
+    const handleBidsUpdated = () => {
+      console.log('Bids updated event received, refreshing dashboard...');
+      loadDashboardData();
+    };
+
+    window.addEventListener('bidsUpdated', handleBidsUpdated);
+
+    return () => {
+      window.removeEventListener('bidsUpdated', handleBidsUpdated);
+    };
+  }, [publicKey]);
+
   const loadDashboardData = async () => {
     try {
       setLoading(true);
@@ -47,6 +54,8 @@ export function CustomerDashboard({
         getBidsByUser(publicKey),
         getNFTokensByOwner(publicKey)
       ]);
+
+      // Backend now returns only active bids (superseded bids are filtered out)
       setActiveBids(bids);
       setOwnedTokens(tokens);
     } catch (error) {
@@ -288,15 +297,15 @@ export function CustomerDashboard({
                         <div className="flex items-start justify-between mb-4">
                           <div>
                             <div className="text-white font-medium mb-1">
-                              {nftoken?.invoice_number || 'Invoice NFT'}
+                              {nftoken?.invoice_number || 'Invoice NFT'} <span className="text-gray-500 text-sm font-normal">(Auction #{listing?.aid})</span>
                             </div>
                             <div className="text-sm text-gray-400">
                               Face Value: {nftoken?.face_value?.toLocaleString()} RLUSD
                             </div>
                           </div>
                           <span className={`px-3 py-1 rounded-full text-xs ${
-                            isWinning 
-                              ? 'bg-green-950/50 text-green-400 border border-green-900/50' 
+                            isWinning
+                              ? 'bg-green-950/50 text-green-400 border border-green-900/50'
                               : 'bg-yellow-950/50 text-yellow-400 border border-yellow-900/50'
                           }`}>
                             {isWinning ? 'Winning' : 'Outbid'}
@@ -321,8 +330,8 @@ export function CustomerDashboard({
                           </div>
                           <div>
                             <div className="text-sm text-gray-400 mb-1">Issuer</div>
-                            <div className="text-white text-sm font-mono">
-                              {nftoken?.created_by?.substring(0, 16)}...
+                            <div className="text-white text-sm">
+                              {nftoken?.creator_username || 'Unknown'}
                             </div>
                           </div>
                         </div>
