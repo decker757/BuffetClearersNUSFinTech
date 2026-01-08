@@ -141,7 +141,7 @@ Below is a breakdown of RLFactor’s core features and the specific XRPL primiti
   - Issued token payments
 
 - **How we use it:**  
-  At invoice maturity, the debtor sends payment directly in RLUSD to the wallet holding the invoice NFT. No additional contracts or intermediaries are required.
+  At invoice maturity, the debtor sends payment directly in RLUSD to the wallet holding the invoice NFT. Maturity settlement is executed via XRPL NFT sell offers, enabling an atomic exchange of the invoice NFT for RLUSD between the NFT holder and the originating establishment. No additional contracts or intermediaries are required.
 
 - **Example of outstanding Receivables(tied to owned NFTs) for an Investor Account**
   <img width="1280" height="762" alt="image" src="https://github.com/user-attachments/assets/15b31b86-ab78-4375-9626-e4ab7a8ed5d3" />
