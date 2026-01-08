@@ -111,15 +111,9 @@ export function SignIn({ onSignIn, onNavigateToDemoGenerator }: SignInProps) {
           </div>
           
           <h1 className="text-4xl lg:text-5xl mb-4 text-white">
-            Sign In to <span className="bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">InvoiceNFT</span>
+            Sign In to <span className="bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">RLFactor</span>
           </h1>
-          <p className="text-xl text-gray-400 mb-4">Enter your XRPL wallet seed to continue</p>
-
-          <div className="max-w-2xl mx-auto p-3 bg-yellow-950/30 border border-yellow-900/50 rounded-lg">
-            <p className="text-sm text-yellow-400">
-              <strong>Testnet Demo:</strong> Using cryptographic wallet authentication. Seed never leaves your browser.
-            </p>
-          </div>
+          <p className="text-xl text-gray-400">Enter your XRPL wallet seed to continue</p>
         </div>
 
         <form onSubmit={handleSubmit} className="p-8 bg-gray-900 border border-gray-800 rounded-2xl">
@@ -151,9 +145,6 @@ export function SignIn({ onSignIn, onNavigateToDemoGenerator }: SignInProps) {
                 {keyError}
               </div>
             )}
-            <p className="mt-2 text-xs text-gray-500">
-              Seed is used locally to sign authentication challenge. Never sent to the server.
-1            </p>
           </div>
 
           <button
@@ -164,20 +155,6 @@ export function SignIn({ onSignIn, onNavigateToDemoGenerator }: SignInProps) {
             {isValidating ? 'Validating...' : 'Sign In'}
           </button>
 
-          <div className="mt-6 pt-6 border-t border-gray-800">
-            <p className="text-sm text-gray-400 text-center mb-3">
-              New to InvoiceNFT? Your account will be created automatically.
-            </p>
-            <div className="p-3 bg-blue-950/30 border border-blue-900/50 rounded-lg">
-              <p className="text-xs text-blue-400 mb-1">
-                <strong>Demo Seeds:</strong> Use generated testnet seeds from your backend
-              </p>
-              <div className="flex flex-col gap-1 mt-2">
-                <code className="text-xs text-gray-400 font-mono">sEdVKBkyJYz1UzRy4o1xnZmsvRLeSFZ (Bakery)</code>
-                <code className="text-xs text-gray-400 font-mono">sEdVTLs4jiZh5EpUsvMBTX2yvLMW1M8 (Investor)</code>
-              </div>
-            </div>
-          </div>
         </form>
 
         {/* Security info */}
@@ -193,26 +170,6 @@ export function SignIn({ onSignIn, onNavigateToDemoGenerator }: SignInProps) {
             <li>• New users complete onboarding, returning users go to dashboard</li>
           </ul>
         </div>
-
-        {/* Demo Data Generator Link */}
-        {onNavigateToDemoGenerator && (
-          <div className="mt-4">
-            <button
-              onClick={onNavigateToDemoGenerator}
-              className="w-full p-4 bg-gradient-to-r from-green-900/30 to-emerald-900/30 border border-green-700/50 rounded-lg hover:border-green-600/50 transition-all group"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-green-600/20 rounded-lg flex items-center justify-center group-hover:bg-green-600/30 transition-colors">
-                  <Database className="w-5 h-5 text-green-400" />
-                </div>
-                <div className="text-left flex-1">
-                  <h4 className="text-sm font-medium text-white mb-0.5">Need Demo Data?</h4>
-                  <p className="text-xs text-gray-400">Generate sample accounts and NFTs for testing</p>
-                </div>
-              </div>
-            </button>
-          </div>
-        )}
       </div>
     </div>
   );

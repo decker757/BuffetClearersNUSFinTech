@@ -1,6 +1,8 @@
 import { Target, Eye, Lightbulb, Shield, Zap, Globe, Users, Award, TrendingUp } from 'lucide-react';
 
-export function About() {
+type Page = 'home' | 'marketplace' | 'how-it-works' | 'about' | 'dashboard' | 'sign-in';
+
+export function About({ setCurrentPage }: { setCurrentPage: (page: Page) => void }) {
   return (
     <div className="min-h-screen bg-gray-950 pt-16">
       {/* Hero Section */}
@@ -12,7 +14,7 @@ export function About() {
 
         <div className="max-w-4xl mx-auto text-center relative z-10">
           <h1 className="text-5xl lg:text-6xl text-white mb-6">
-            About InvoiceNFT
+            About RLFactor
           </h1>
           <p className="text-xl text-gray-400 max-w-2xl mx-auto">
             A demo platform showcasing XRPL-based invoice financing through NFT tokenization and on-chain auctions
@@ -300,10 +302,16 @@ export function About() {
             Be part of the revolution transforming invoice financing through blockchain technology
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <button className="px-8 py-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl hover:from-blue-700 hover:to-purple-700 transition-all text-lg">
+            <button
+              onClick={() => setCurrentPage('sign-in')}
+              className="px-8 py-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl hover:from-blue-700 hover:to-purple-700 transition-all text-lg"
+            >
               Get Started
             </button>
-            <button className="px-8 py-4 bg-gray-900 text-white rounded-xl border border-gray-800 hover:border-gray-700 transition-all text-lg">
+            <button
+              onClick={() => window.open('https://share.google/zEuc7Teue0D8iNZq7', '_blank')}
+              className="px-8 py-4 bg-gray-900 text-white rounded-xl border border-gray-800 hover:border-gray-700 transition-all text-lg"
+            >
               Contact Us
             </button>
           </div>

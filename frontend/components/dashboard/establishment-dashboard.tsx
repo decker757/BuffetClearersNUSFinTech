@@ -130,7 +130,7 @@ export function EstablishmentDashboard({
   };
   
   const [establishmentInfo, setEstablishmentInfo] = useState<EstablishmentInfo>({
-    name: username + ' Corp',
+    name: username,
     registrationNumber: 'REG-' + Math.random().toString(36).substr(2, 9).toUpperCase(),
     address: '',
     contact: ''

@@ -19,7 +19,7 @@ const features = [
   {
     icon: Globe,
     title: 'RLUSD Stablecoin',
-    description: 'Trade in USD stablecoin for price stability and regulatory compliance.',
+    description: 'Trade in RLUSD stablecoin for price stability and regulatory compliance.',
   },
   {
     icon: Lock,
@@ -45,7 +45,7 @@ export function Features() {
       
       <div className="max-w-7xl mx-auto relative z-10">
         <div className="text-center mb-16">
-          <h2 className="text-4xl lg:text-5xl mb-4 text-white">Why Choose InvoiceNFT</h2>
+          <h2 className="text-4xl lg:text-5xl mb-4 text-white">Why Choose RLFactor</h2>
           <p className="text-xl text-gray-400 max-w-2xl mx-auto">
             The most secure and efficient platform for invoice financing
           </p>
@@ -73,7 +73,7 @@ export function Features() {
           </div>
           <div className="p-8 bg-gray-900 rounded-xl border border-gray-800 text-center">
             <div className="text-4xl mb-2 text-white">&lt;24h</div>
-            <div className="text-gray-400">Average Time to Fund</div>
+            <div className="text-gray-400">Potential Time to Fund</div>
           </div>
           <div className="p-8 bg-gray-900 rounded-xl border border-gray-800 text-center">
             <div className="text-4xl mb-2 text-white">$0.001</div>

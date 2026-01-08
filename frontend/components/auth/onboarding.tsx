@@ -64,7 +64,7 @@ export function Onboarding({ publicKey, onComplete }: OnboardingProps) {
           </div>
           
           <h1 className="text-4xl lg:text-5xl mb-4 text-white">
-            Welcome to <span className="bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">InvoiceNFT</span>
+            Welcome to <span className="bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">RLFactor</span>
           </h1>
           <p className="text-xl text-gray-400 mb-4">
             {step === 'role' ? 'Choose your account type to get started' : 'Tell us a bit about yourself'}
