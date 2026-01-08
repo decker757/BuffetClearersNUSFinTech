@@ -101,6 +101,7 @@ export async function getNFTokensByCreator(publicKey: string) {
     .from('NFTOKEN')
     .select('*')
     .eq('created_by', publicKey)
+    .eq('current_state', 'issued') // Only show successfully minted NFTs
     .order('nftoken_id', { ascending: false });
 
   if (error) throw error;
@@ -113,6 +114,7 @@ export async function getNFTokensByOwner(publicKey: string) {
     .from('NFTOKEN')
     .select('*')
     .eq('current_owner', publicKey)
+    .in('current_state', ['issued', 'owned', 'listed']) // Show NFTs: issued (pending), owned (accepted), listed (on auction)
     .order('nftoken_id', { ascending: false });
 
   if (error) throw error;
@@ -212,39 +214,21 @@ export async function getAllAuctionListings() {
 }
 
 export async function getActiveAuctionListings() {
-  checkSupabaseConfig();
-  const now = new Date().toISOString();
-  
-  // First get auction listings
-  const { data: listings, error: listingsError } = await supabase
-    .from('AUCTIONLISTING')
-    .select('*')
-    .gt('expiry', now)
-    .order('time_created', { ascending: false });
-
-  if (listingsError) throw listingsError;
-  
-  // Then fetch NFT data for each listing
-  const listingsWithNFTs: AuctionListingWithNFT[] = [];
-  
-  for (const listing of listings || []) {
-    if (listing.nftoken_id) {
-      const { data: nft } = await supabase
-        .from('NFTOKEN')
-        .select('*')
-        .eq('nftoken_id', listing.nftoken_id)
-        .single();
-      
-      listingsWithNFTs.push({
-        ...listing,
-        NFTOKEN: nft || undefined
-      });
-    } else {
-      listingsWithNFTs.push(listing);
+  // Use backend API endpoint for consistency
+  const response = await fetch('http://localhost:6767/auctions', {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json'
     }
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to fetch auction listings');
   }
-  
-  return listingsWithNFTs;
+
+  const result = await response.json();
+  return result.auctions as AuctionListingWithNFT[]; // Returns auctions with nested NFTOKEN data
 }
 
 export async function getAuctionListingsByCreator(publicKey: string) {
@@ -257,6 +241,21 @@ export async function getAuctionListingsByCreator(publicKey: string) {
     `)
     .eq('NFTOKEN.created_by', publicKey)
     .order('time_created', { ascending: false });
+
+  if (error) throw error;
+  return data as AuctionListingWithNFT[];
+}
+
+export async function getAuctionListingsByOwner(publicKey: string) {
+  checkSupabaseConfig();
+  const { data, error } = await supabase
+    .from('AUCTIONLISTING')
+    .select(`
+      *,
+      NFTOKEN (*)
+    `)
+    .eq('original_owner', publicKey) // Get auctions where user is the lister
+    .order('time_created', { ascending: false});
 
   if (error) throw error;
   return data as AuctionListingWithNFT[];
@@ -302,33 +301,54 @@ export async function placeBid(aid: number, bid_amount: number, bid_by: string) 
   return bidData as AuctionBid;
 }
 
-export async function getBidsByAuction(aid: number) {
+export async function getBidCountsByAuctions(aids: number[]): Promise<Record<number, number>> {
   checkSupabaseConfig();
+
+  if (aids.length === 0) {
+    return {};
+  }
+
+  // Get all bids for these auctions
   const { data, error } = await supabase
     .from('AUCTIONBIDS')
-    .select('*')
-    .eq('aid', aid)
-    .order('created_at', { ascending: false });
+    .select('aid')
+    .in('aid', aids);
 
   if (error) throw error;
-  return data as AuctionBid[];
+
+  // Count bids by auction ID
+  const counts: Record<number, number> = {};
+  for (const bid of data || []) {
+    counts[bid.aid] = (counts[bid.aid] || 0) + 1;
+  }
+
+  return counts;
 }
 
-export async function getBidsByUser(publicKey: string) {
-  checkSupabaseConfig();
-  
-  // First get the bids
-  const { data: bids, error: bidsError } = await supabase
-    .from('AUCTIONBIDS')
-    .select('*')
-    .eq('bid_by', publicKey)
-    .order('created_at', { ascending: false });
+export async function getBidsByUser(_publicKey: string) {
+  // Use backend API endpoint which properly handles authentication
+  // The publicKey parameter is kept for backwards compatibility but not used
+  // Authentication is handled via JWT token
+  const authToken = localStorage.getItem('authToken');
+  if (!authToken) {
+    throw new Error('Authentication required');
+  }
 
-  if (bidsError) throw bidsError;
-  
-  // For now, return bids without nested data
-  // The dashboard will fetch additional details if needed
-  return bids as AuctionBid[];
+  const response = await fetch('http://localhost:6767/auctions/user/bids', {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${authToken}`,
+      'Content-Type': 'application/json'
+    }
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to fetch user bids');
+  }
+
+  const result = await response.json();
+  return result.bids as any[]; // Returns bids with nested AUCTIONLISTING and NFTOKEN data
 }
 
 export async function getHighestBidForAuction(aid: number) {
@@ -346,6 +366,18 @@ export async function getHighestBidForAuction(aid: number) {
     throw error;
   }
   return data as AuctionBid;
+}
+
+export async function getBidsByAuction(aid: number) {
+  checkSupabaseConfig();
+  const { data, error } = await supabase
+    .from('AUCTIONBIDS')
+    .select('*')
+    .eq('aid', aid)
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  return data as AuctionBid[];
 }
 
 export async function getAllBids() {

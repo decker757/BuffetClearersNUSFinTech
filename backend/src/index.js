@@ -1,12 +1,15 @@
+// CRITICAL: This MUST be the first import to load environment variables
+import "./init.js";
+
+// Now import everything else - env vars are now loaded
 import express from "express";
 import cors from "cors";
-import dotenv from "dotenv";
 import { connectXRPL } from "./config/xrplClient.js";
 import authRoutes from "./routes/auth.js";
 import auctionRoutes from "./routes/auctions.js";
+import nftRoutes from "./routes/nft.js";
 import { authenticateToken } from "./middleware/auth.js";
-
-dotenv.config();
+import { startAuctionScheduler } from "./jobs/auctionScheduler.js";
 
 const app = express();
 
@@ -24,6 +27,9 @@ app.use("/auth", authRoutes);
 
 // Auction routes
 app.use("/", auctionRoutes);
+
+// NFT routes
+app.use("/nft", nftRoutes);
 
 // Protected route example
 app.get("/protected", authenticateToken, (req, res) => {
@@ -44,6 +50,9 @@ const PORT = process.env.PORT || 6767;
 app.listen(PORT, async () => {
   await connectXRPL();
   console.log(`Backend running on http://localhost:${PORT}`);
+
+  // Start the auction finalization scheduler
+  startAuctionScheduler();
 });
 
 export default app;

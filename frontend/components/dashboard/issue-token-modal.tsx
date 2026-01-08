@@ -1,34 +1,83 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { X, FileText } from 'lucide-react';
+import { getAllUsers } from '../../lib/database';
+import { User } from '../../lib/supabase';
+import { toast } from 'sonner';
 
 interface Token {
   invoiceNumber: string;
   amount: number;
   maturityDate: string;
   buyer: string;
+  buyerPublicKey: string;
 }
 
 export function IssueTokenModal({
   onClose,
-  onIssue
+  onIssue,
+  currentUserPublicKey
 }: {
   onClose: () => void;
   onIssue: (token: Token) => void;
+  currentUserPublicKey: string;
 }) {
   const [formData, setFormData] = useState({
     invoiceNumber: '',
     amount: '',
     maturityDate: '',
-    creditorEstablishment: ''
+    creditorPublicKey: ''
   });
+
+  const [establishments, setEstablishments] = useState<User[]>([]);
+  const [loadingEstablishments, setLoadingEstablishments] = useState(true);
+
+  // Fetch all establishment users when modal opens
+  useEffect(() => {
+    const fetchEstablishments = async () => {
+      try {
+        setLoadingEstablishments(true);
+        const users = await getAllUsers();
+        // Filter only establishment role users AND exclude current user
+        const establishmentUsers = users.filter(
+          user => user.role === 'establishment' && user.publicKey !== currentUserPublicKey
+        );
+        setEstablishments(establishmentUsers);
+      } catch (error) {
+        console.error('Failed to fetch establishments:', error);
+        toast.error('Failed to load establishments');
+      } finally {
+        setLoadingEstablishments(false);
+      }
+    };
+
+    fetchEstablishments();
+  }, [currentUserPublicKey]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Validate that user is not creating an invoice to themselves
+    if (formData.creditorPublicKey === currentUserPublicKey) {
+      toast.error('You cannot create an invoice to yourself. Please select a different creditor.');
+      return;
+    }
+
+    // Find the selected establishment to get their username
+    const selectedEstablishment = establishments.find(
+      est => est.publicKey === formData.creditorPublicKey
+    );
+
+    if (!selectedEstablishment) {
+      toast.error('Please select a creditor establishment');
+      return;
+    }
+
     onIssue({
       invoiceNumber: formData.invoiceNumber,
       amount: parseFloat(formData.amount),
       maturityDate: formData.maturityDate,
-      buyer: formData.creditorEstablishment
+      buyer: selectedEstablishment.username,
+      buyerPublicKey: formData.creditorPublicKey
     });
   };
 
@@ -105,19 +154,32 @@ export function IssueTokenModal({
             </div>
 
             <div>
-              <label htmlFor="creditorEstablishment" className="block text-sm text-gray-400 mb-2">
+              <label htmlFor="creditorPublicKey" className="block text-sm text-gray-400 mb-2">
                 Creditor Establishment (Who you owe money to) *
               </label>
-              <input
-                id="creditorEstablishment"
-                type="text"
-                value={formData.creditorEstablishment}
-                onChange={(e) => setFormData({ ...formData, creditorEstablishment: e.target.value })}
-                placeholder="e.g., ABC Suppliers Ltd"
-                className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-purple-600 transition-colors"
-                required
-              />
-              <p className="text-xs text-gray-500 mt-2">This establishment will receive the token and can auction it</p>
+              {loadingEstablishments ? (
+                <div className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-gray-500">
+                  Loading establishments...
+                </div>
+              ) : (
+                <select
+                  id="creditorPublicKey"
+                  value={formData.creditorPublicKey}
+                  onChange={(e) => setFormData({ ...formData, creditorPublicKey: e.target.value })}
+                  className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-purple-600 transition-colors"
+                  required
+                >
+                  <option value="" className="text-gray-500">Select a creditor establishment...</option>
+                  {establishments.map((establishment) => (
+                    <option key={establishment.publicKey} value={establishment.publicKey}>
+                      {establishment.username} ({establishment.publicKey.slice(0, 8)}...{establishment.publicKey.slice(-6)})
+                    </option>
+                  ))}
+                </select>
+              )}
+              <p className="text-xs text-gray-500 mt-2">
+                This establishment will receive the NFT and can auction it. Only registered establishments are shown.
+              </p>
             </div>
           </div>
 
