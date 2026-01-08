@@ -232,11 +232,21 @@ export async function checkRLUSDBalance(requiredAmount: number): Promise<{ hasEn
     });
 
     // Find RLUSD trustline
+    // XRPL can return currency as either "RLUSD" (standard 3-char) or the full hex code
     const rlusdLine = response.result.lines.find(
-      (line: any) => line.currency === RLUSD_CURRENCY && line.account === RLUSD_ISSUER
+      (line: any) => {
+        const currencyMatch = line.currency === 'RLUSD' || line.currency === RLUSD_CURRENCY;
+        const issuerMatch = line.account === RLUSD_ISSUER;
+        return currencyMatch && issuerMatch;
+      }
     );
 
+    console.log('All trustlines:', response.result.lines);
+    console.log('Looking for RLUSD issuer:', RLUSD_ISSUER);
+    console.log('Found RLUSD line:', rlusdLine);
+
     const balance = rlusdLine ? parseFloat(rlusdLine.balance) : 0;
+    console.log('RLUSD balance:', balance);
 
     return {
       hasEnough: balance >= requiredAmount,

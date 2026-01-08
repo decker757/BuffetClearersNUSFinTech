@@ -46,9 +46,29 @@ export async function mintInvoiceNFT(req, res) {
     console.log(`Creditor: ${creditorPublicKey.slice(0, 10)}...`);
 
     // Convert public keys to wallet addresses (if not already addresses)
-    // Addresses start with 'r', public keys start with 'ED'
-    const debtorAddress = debtorPublicKey.startsWith('r') ? debtorPublicKey : deriveAddress(debtorPublicKey);
-    const creditorAddress = creditorPublicKey.startsWith('r') ? creditorPublicKey : deriveAddress(creditorPublicKey);
+    // Addresses start with 'r', public keys are hex strings (64 or 66 chars)
+    let debtorAddress, creditorAddress;
+
+    try {
+      debtorAddress = debtorPublicKey.startsWith('r') ? debtorPublicKey : deriveAddress(debtorPublicKey);
+    } catch (error) {
+      console.error('Error deriving debtor address:', error);
+      return res.status(400).json({
+        error: 'Invalid debtor public key or address',
+        details: error.message
+      });
+    }
+
+    try {
+      creditorAddress = creditorPublicKey.startsWith('r') ? creditorPublicKey : deriveAddress(creditorPublicKey);
+    } catch (error) {
+      console.error('Error deriving creditor address:', error);
+      return res.status(400).json({
+        error: 'Invalid creditor public key or address',
+        details: error.message
+      });
+    }
+
     console.log(`Debtor Address: ${debtorAddress}`);
     console.log(`Creditor Address: ${creditorAddress}`);
 

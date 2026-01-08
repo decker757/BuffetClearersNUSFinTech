@@ -16,10 +16,16 @@ export function ListTokenModal({
     auctionExpiry: '',
     walletSeed: ''
   });
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onList(token.nftoken_id, parseFloat(formData.listingPrice), formData.auctionExpiry, formData.walletSeed);
+    setIsSubmitting(true);
+    try {
+      await onList(token.nftoken_id, parseFloat(formData.listingPrice), formData.auctionExpiry, formData.walletSeed);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const discountPercentage = formData.listingPrice && token.face_value
@@ -142,15 +148,17 @@ export function ListTokenModal({
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 px-4 py-3 border border-gray-700 text-gray-300 rounded-lg hover:bg-gray-800 transition-colors"
+              disabled={isSubmitting}
+              className="flex-1 px-4 py-3 border border-gray-700 text-gray-300 rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="flex-1 px-4 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:opacity-90 transition-opacity"
+              disabled={isSubmitting || !formData.listingPrice || !formData.auctionExpiry || !formData.walletSeed}
+              className="flex-1 px-4 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              List Token
+              {isSubmitting ? 'Listing...' : 'List Token'}
             </button>
           </div>
         </form>
