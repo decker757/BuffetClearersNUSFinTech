@@ -40,6 +40,20 @@ export function CustomerDashboard({
     loadDashboardData();
   }, [publicKey]);
 
+  // Listen for bid updates
+  useEffect(() => {
+    const handleBidsUpdated = () => {
+      console.log('Bids updated event received, refreshing dashboard...');
+      loadDashboardData();
+    };
+
+    window.addEventListener('bidsUpdated', handleBidsUpdated);
+
+    return () => {
+      window.removeEventListener('bidsUpdated', handleBidsUpdated);
+    };
+  }, [publicKey]);
+
   const loadDashboardData = async () => {
     try {
       setLoading(true);

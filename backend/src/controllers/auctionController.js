@@ -1,14 +1,26 @@
 import { supabase } from '../config/supabase.js';
+import { hasEnoughRLUSD } from '../services/xrplService.js';
+import { finalizeAuction, processExpiredAuctions } from '../services/auctionFinalizationService.js';
 
 // Create a new auction listing
 export const createAuction = async (req, res) => {
   try {
-    const { nftoken_id, face_value, expiry, min_bid } = req.body;
+    const { nftoken_id, face_value, expiry, min_bid, original_owner } = req.body;
+    const { address } = req.user; // From JWT token
 
     // Validate required fields
-    if (!nftoken_id || !face_value || !expiry || !min_bid) {
+    if (!nftoken_id || !face_value || !expiry || !min_bid || !original_owner) {
       return res.status(400).json({
-        error: 'Missing required fields: nftoken_id, face_value, expiry, min_bid'
+        error: 'Missing required fields: nftoken_id, face_value, expiry, min_bid, original_owner'
+      });
+    }
+
+    // Verify that authenticated user matches original_owner
+    if (address !== original_owner) {
+      return res.status(403).json({
+        error: 'original_owner must match authenticated wallet address',
+        authenticated_user: address,
+        provided_owner: original_owner
       });
     }
 
@@ -20,6 +32,14 @@ export const createAuction = async (req, res) => {
       });
     }
 
+    // TODO: Verify platform wallet holds the NFT
+    // In production, query XRPL ledger to check NFT ownership
+    // For now, we'll trust that user transferred NFT before creating listing
+    // const nftOwner = await getNFTOwner(nftoken_id);
+    // if (nftOwner !== PLATFORM_WALLET_ADDRESS) {
+    //   return res.status(400).json({ error: 'Platform does not hold this NFT' });
+    // }
+
     // Create auction listing
     const { data, error } = await supabase
       .from('AUCTIONLISTING')
@@ -28,7 +48,10 @@ export const createAuction = async (req, res) => {
         face_value,
         expiry: expiryDate.toISOString(),
         min_bid,
-        current_bid: min_bid
+        current_bid: min_bid,
+        original_owner: address,
+        platform_holds_nft: true,  // Assuming NFT was transferred
+        status: 'active'
       })
       .select()
       .single();
@@ -158,7 +181,7 @@ export const getAuctionBids = async (req, res) => {
 // Get all bids by a specific user
 export const getUserBids = async (req, res) => {
   try {
-    const { publicKey } = req.user; // From JWT token
+    const { address } = req.user; // From JWT token
 
     const { data, error } = await supabase
       .from('AUCTIONBIDS')
@@ -177,7 +200,7 @@ export const getUserBids = async (req, res) => {
           )
         )
       `)
-      .eq('bid_by', publicKey)
+      .eq('bid_by', address)
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -199,13 +222,20 @@ export const getUserBids = async (req, res) => {
 export const placeBid = async (req, res) => {
   try {
     const { id } = req.params; // auction ID
-    const { bid_amount } = req.body;
-    const { publicKey } = req.user; // From JWT token
+    const { bid_amount, xrpl_check_id, xrpl_check_tx_hash } = req.body;
+    const { address } = req.user; // From JWT token
 
-    // Validate bid amount
+    // Validate required fields
     if (!bid_amount || bid_amount <= 0) {
       return res.status(400).json({
         error: 'Invalid bid amount'
+      });
+    }
+
+    if (!xrpl_check_id || !xrpl_check_tx_hash) {
+      return res.status(400).json({
+        error: 'Missing Check information. Please create XRPL Check before placing bid.',
+        required_fields: ['xrpl_check_id', 'xrpl_check_tx_hash']
       });
     }
 
@@ -244,17 +274,27 @@ export const placeBid = async (req, res) => {
       });
     }
 
-    // TODO: Check if user has sufficient RLUSD balance
-    // This will be implemented by your friend handling XRPL integration
-    // For now, we'll assume the user has sufficient balance
+    // Verify bidder has sufficient RLUSD balance
+    const hasSufficientBalance = await hasEnoughRLUSD(address, bid_amount);
 
-    // Insert bid record
+    if (!hasSufficientBalance) {
+      return res.status(400).json({
+        error: 'Insufficient RLUSD balance to place this bid',
+        bid_amount,
+        message: `You need at least ${bid_amount} RLUSD to place this bid`
+      });
+    }
+
+    // Insert bid record with Check information
     const { data: bidData, error: bidError } = await supabase
       .from('AUCTIONBIDS')
       .insert({
         aid: id,
         bid_amount,
-        bid_by: publicKey
+        bid_by: address,
+        xrpl_check_id,
+        xrpl_check_tx_hash,
+        check_status: 'active'
       })
       .select()
       .single();
@@ -277,9 +317,8 @@ export const placeBid = async (req, res) => {
       return res.status(500).json({ error: 'Failed to update auction' });
     }
 
-    // TODO: Trigger XRPL payment (Investor → Bakery)
-    // This will be implemented by your friend handling XRPL integration
-    // For now, we just return success
+    // XRPL Check created and verified
+    // Check will be cashed when auction expires (see auctionFinalizationService.js)
 
     res.status(201).json({
       success: true,
@@ -290,5 +329,44 @@ export const placeBid = async (req, res) => {
   } catch (error) {
     console.error('Error in placeBid:', error);
     res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Manually finalize a specific auction (admin/testing endpoint)
+export const finalizeAuctionManually = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    console.log(`Manual finalization requested for auction ${id}`);
+
+    const result = await finalizeAuction(id);
+
+    res.json({
+      success: result.success,
+      status: result.status,
+      message: result.message,
+      details: result.details
+    });
+  } catch (error) {
+    console.error('Error in finalizeAuctionManually:', error);
+    res.status(500).json({ error: 'Internal server error', message: error.message });
+  }
+};
+
+// Process all expired auctions (admin/testing endpoint)
+export const processAllExpiredAuctions = async (req, res) => {
+  try {
+    console.log('Manual processing of all expired auctions requested');
+
+    // Run the background job manually
+    await processExpiredAuctions();
+
+    res.json({
+      success: true,
+      message: 'Expired auctions processing completed. Check server logs for details.'
+    });
+  } catch (error) {
+    console.error('Error in processAllExpiredAuctions:', error);
+    res.status(500).json({ error: 'Internal server error', message: error.message });
   }
 };

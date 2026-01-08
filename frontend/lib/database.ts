@@ -214,22 +214,21 @@ export async function getAllAuctionListings() {
 }
 
 export async function getActiveAuctionListings() {
-  checkSupabaseConfig();
-  const now = new Date().toISOString();
-  
-  // Single query with JOIN
-  const { data: listings, error } = await supabase
-    .from('AUCTIONLISTING')
-    .select(`
-      *,
-      NFTOKEN (*)
-    `)
-    .gt('expiry', now)
-    .order('time_created', { ascending: false });
+  // Use backend API endpoint for consistency
+  const response = await fetch('http://localhost:6767/auctions', {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json'
+    }
+  });
 
-  if (error) throw error;
-  
-  return listings as AuctionListingWithNFT[];
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to fetch auction listings');
+  }
+
+  const result = await response.json();
+  return result.auctions as AuctionListingWithNFT[]; // Returns auctions with nested NFTOKEN data
 }
 
 export async function getAuctionListingsByCreator(publicKey: string) {
@@ -297,33 +296,33 @@ export async function getBidCountsByAuctions(aids: number[]) {
     .in('aid', aids);
 
   if (error) throw error;
-  
-  // Aggregate counts
-  const counts: Record<number, number> = {};
-  aids.forEach(aid => counts[aid] = 0); // Initialize all to 0
-  
-  data?.forEach(bid => {
-    counts[bid.aid] = (counts[bid.aid] || 0) + 1;
-  });
-  
-  return counts;
+  return data as AuctionBid[];
 }
 
-export async function getBidsByUser(publicKey: string) {
-  checkSupabaseConfig();
-  
-  // First get the bids
-  const { data: bids, error: bidsError } = await supabase
-    .from('AUCTIONBIDS')
-    .select('*')
-    .eq('bid_by', publicKey)
-    .order('created_at', { ascending: false });
+export async function getBidsByUser(_publicKey: string) {
+  // Use backend API endpoint which properly handles authentication
+  // The publicKey parameter is kept for backwards compatibility but not used
+  // Authentication is handled via JWT token
+  const authToken = localStorage.getItem('authToken');
+  if (!authToken) {
+    throw new Error('Authentication required');
+  }
 
-  if (bidsError) throw bidsError;
-  
-  // For now, return bids without nested data
-  // The dashboard will fetch additional details if needed
-  return bids as AuctionBid[];
+  const response = await fetch('http://localhost:6767/auctions/user/bids', {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${authToken}`,
+      'Content-Type': 'application/json'
+    }
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to fetch user bids');
+  }
+
+  const result = await response.json();
+  return result.bids as any[]; // Returns bids with nested AUCTIONLISTING and NFTOKEN data
 }
 
 export async function getHighestBidForAuction(aid: number) {

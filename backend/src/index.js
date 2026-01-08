@@ -9,6 +9,7 @@ import authRoutes from "./routes/auth.js";
 import auctionRoutes from "./routes/auctions.js";
 import nftRoutes from "./routes/nft.js";
 import { authenticateToken } from "./middleware/auth.js";
+import { startAuctionScheduler } from "./jobs/auctionScheduler.js";
 
 const app = express();
 
@@ -49,6 +50,9 @@ const PORT = process.env.PORT || 6767;
 app.listen(PORT, async () => {
   await connectXRPL();
   console.log(`Backend running on http://localhost:${PORT}`);
+
+  // Start the auction finalization scheduler
+  startAuctionScheduler();
 });
 
 export default app;

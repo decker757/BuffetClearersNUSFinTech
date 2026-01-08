@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { ChevronDown, TrendingUp, Clock, X, Calendar, FileText, Shield, DollarSign, Timer, AlertCircle } from 'lucide-react';
+import { ChevronDown, TrendingUp, Clock, X, Calendar, FileText, Shield, DollarSign, Timer, AlertCircle, Loader2 } from 'lucide-react';
 import { UserRole } from './auth/onboarding';
 import { getActiveAuctionListings, placeBid, getBidCountsByAuctions, getBidsByUser } from '../lib/database';
 import { AuctionListingWithNFT } from '../lib/supabase';
 import { toast } from 'sonner';
+import { placeBidWithEscrow } from '../utils/bidWithEscrow';
 
 export function Marketplace({ userPublicKey, userRole }: { userPublicKey: string | null, userRole: UserRole | null }) {
   const [sortBy, setSortBy] = useState('recently-added');
@@ -15,6 +16,7 @@ export function Marketplace({ userPublicKey, userRole }: { userPublicKey: string
   const [loading, setLoading] = useState(true);
   const [currentTime, setCurrentTime] = useState(Date.now());
   const [bidCounts, setBidCounts] = useState<Record<number, number>>({});
+  const [placingBid, setPlacingBid] = useState(false);
 
   // Update current time every minute for countdown
   useEffect(() => {
@@ -72,18 +74,39 @@ export function Marketplace({ userPublicKey, userRole }: { userPublicKey: string
     if (!confirmationData || !userPublicKey) return;
 
     const { auction, bidAmount } = confirmationData;
-    
+
     try {
-      await placeBid(auction.aid, parseFloat(bidAmount), userPublicKey);
-      toast.success(`Bid placed successfully for ${bidAmount} RLUSD on ${auction.NFTOKEN?.invoice_number || 'NFT'}!`);
-      
-      // Reload data
-      setConfirmationData(null);
-      setSelectedAuction(null);
-      await loadAuctionListings();
+      setPlacingBid(true);
+      toast.loading('Creating RLUSD Check on XRPL...', { id: 'bid-process' });
+
+      // Use the new escrow-based bidding
+      const result = await placeBidWithEscrow(
+        auction.aid.toString(),
+        parseFloat(bidAmount),
+        auction.expiry || new Date().toISOString()
+      );
+
+      if (result.success) {
+        toast.success(
+          `Bid placed successfully! Check created: ${result.data?.checkTxHash.substring(0, 8)}...`,
+          { id: 'bid-process' }
+        );
+
+        // Reload data
+        setConfirmationData(null);
+        setSelectedAuction(null);
+        await loadAuctionListings();
+
+        // Notify dashboard to refresh bids
+        window.dispatchEvent(new CustomEvent('bidsUpdated'));
+      } else {
+        toast.error(result.message, { id: 'bid-process' });
+      }
     } catch (error) {
       console.error('Failed to place bid:', error);
-      toast.error('Failed to place bid. Please try again.');
+      toast.error('Failed to place bid. Please try again.', { id: 'bid-process' });
+    } finally {
+      setPlacingBid(false);
     }
   };
 
@@ -318,6 +341,7 @@ export function Marketplace({ userPublicKey, userRole }: { userPublicKey: string
           bidAmount={confirmationData.bidAmount}
           onConfirm={handleConfirmBid}
           onCancel={() => setConfirmationData(null)}
+          isPlacingBid={placingBid}
         />
       )}
     </div>
@@ -514,12 +538,14 @@ function BidConfirmationModal({
   auction,
   bidAmount,
   onConfirm,
-  onCancel
+  onCancel,
+  isPlacingBid
 }: {
   auction: AuctionListingWithNFT;
   bidAmount: string;
   onConfirm: () => void;
   onCancel: () => void;
+  isPlacingBid: boolean;
 }) {
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" onClick={onCancel}>
@@ -546,6 +572,19 @@ function BidConfirmationModal({
             </div>
           </div>
 
+          <div className="bg-amber-950/30 border border-amber-900/50 rounded-lg p-4 mb-6">
+            <div className="flex items-start gap-2">
+              <AlertCircle className="w-5 h-5 text-amber-400 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-amber-400 text-sm font-medium mb-1">XRPL Check</p>
+                <p className="text-gray-400 text-xs">
+                  Your bid will create a Check on XRPL for the RLUSD amount.
+                  Ensure you maintain sufficient balance until auction settlement.
+                </p>
+              </div>
+            </div>
+          </div>
+
           <p className="text-gray-400 text-sm mb-6">
             By confirming this bid, you agree to purchase this invoice NFT if you win the auction at maturity for the bid amount.
           </p>
@@ -553,15 +592,24 @@ function BidConfirmationModal({
           <div className="flex gap-3">
             <button
               onClick={onCancel}
-              className="flex-1 px-4 py-3 border border-gray-700 text-gray-300 rounded-lg hover:bg-gray-800 transition-colors"
+              disabled={isPlacingBid}
+              className="flex-1 px-4 py-3 border border-gray-700 text-gray-300 rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Cancel
             </button>
             <button
               onClick={onConfirm}
-              className="flex-1 px-4 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:opacity-90 transition-opacity"
+              disabled={isPlacingBid}
+              className="flex-1 px-4 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
-              Confirm Bid
+              {isPlacingBid ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Creating Escrow...
+                </>
+              ) : (
+                'Confirm Bid'
+              )}
             </button>
           </div>
         </div>
