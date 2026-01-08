@@ -1,18 +1,18 @@
-import cron from 'node-cron';
 import { processExpiredAuctions } from '../services/auctionFinalizationService.js';
 
 /**
  * Start the auction finalization scheduler
- * Runs every 5 minutes to check for and process expired auctions
+ * Runs every 3 seconds for DEMO purposes (instant finalization)
+ *
+ * Note: For production, change to every 5 minutes using cron
  */
 export function startAuctionScheduler() {
   console.log('Starting auction finalization scheduler...');
 
-  // Run every 5 minutes: '*/5 * * * *'
-  // For testing, you can use '* * * * *' to run every minute
-  const schedule = '*/5 * * * *';
+  // Run every 3 seconds for DEMO
+  const INTERVAL_MS = 3000; // 3 seconds
 
-  const task = cron.schedule(schedule, async () => {
+  const intervalId = setInterval(async () => {
     console.log(`\n[${new Date().toISOString()}] Running auction finalization check...`);
 
     try {
@@ -21,27 +21,24 @@ export function startAuctionScheduler() {
     } catch (error) {
       console.error('Error during scheduled auction finalization:', error);
     }
-  }, {
-    scheduled: true,
-    timezone: 'UTC'
-  });
+  }, INTERVAL_MS);
 
-  console.log(`Auction scheduler started. Running every 5 minutes.`);
+  console.log(`🚀 Auction scheduler started. Running every 3 seconds (DEMO MODE).`);
 
   // Run immediately on startup to process any pending auctions
   processExpiredAuctions()
     .then(() => console.log('Initial auction finalization check completed'))
     .catch(error => console.error('Error in initial auction finalization:', error));
 
-  return task;
+  return intervalId;
 }
 
 /**
  * Stop the auction scheduler
  */
-export function stopAuctionScheduler(task) {
-  if (task) {
-    task.stop();
+export function stopAuctionScheduler(intervalId) {
+  if (intervalId) {
+    clearInterval(intervalId);
     console.log('Auction scheduler stopped');
   }
 }

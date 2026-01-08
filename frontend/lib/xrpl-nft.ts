@@ -15,11 +15,11 @@ export async function findNFTSellOffers(nftokenId: string): Promise<any[]> {
     const response = await client.request({
       command: 'nft_sell_offers',
       nft_id: nftokenId,
-    });
+    } as any);
 
     console.log('📋 XRPL Response:', response);
 
-    const offers = response.result.offers || [];
+    const offers = (response as any).result.offers || [];
     console.log(`✅ Found ${offers.length} sell offer(s)`);
 
     return offers;

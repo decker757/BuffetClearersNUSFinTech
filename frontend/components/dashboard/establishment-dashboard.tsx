@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, FileText, Package, Settings, Timer, TrendingUp } from 'lucide-react';
+import { Plus, FileText, Package, Settings, Timer, TrendingUp, DollarSign, AlertCircle } from 'lucide-react';
 import { IssueTokenModal } from './issue-token-modal';
 import { ListTokenModal } from './list-token-modal';
 import { EstablishmentSettingsModal } from './establishment-settings-modal';
@@ -9,6 +9,7 @@ import { NFToken, AuctionListingWithNFT } from '../../lib/supabase';
 import { mintInvoiceNFT, authenticatedFetch } from '../../lib/api';
 import { findNFTSellOffers, acceptNFTOffer, createSellOfferToPlatform, getNFTOwner } from '../../lib/xrpl-nft';
 import { toast } from 'sonner';
+import { fetchPendingPayments, createMaturityPaymentCheck, MaturityPayment } from '../../utils/maturityPayment';
 
 // Platform wallet address from backend
 const PLATFORM_ADDRESS = 'rJoESWx9ZKHpEyNrLWBTA95XLxwoKJj59u';
@@ -38,8 +39,10 @@ export function EstablishmentDashboard({
   const [issuedTokens, setIssuedTokens] = useState<NFToken[]>([]);
   const [ownedTokens, setOwnedTokens] = useState<NFToken[]>([]);
   const [auctionListings, setAuctionListings] = useState<AuctionListingWithNFT[]>([]);
+  const [pendingPayments, setPendingPayments] = useState<MaturityPayment[]>([]);
   const [loading, setLoading] = useState(true);
   const [bidCounts, setBidCounts] = useState<Record<string, number>>({});
+  const [creatingCheckFor, setCreatingCheckFor] = useState<number | null>(null);
   
   // Update current time every minute for countdown
   useEffect(() => {
@@ -61,7 +64,8 @@ export function EstablishmentDashboard({
       await Promise.all([
         loadIssuedTokens(),
         loadOwnedTokens(),
-        loadAuctionListings()
+        loadAuctionListings(),
+        loadPendingPayments()
       ]);
     } catch (error) {
       console.error('Failed to load dashboard data:', error);
@@ -103,6 +107,15 @@ export function EstablishmentDashboard({
       setBidCounts(counts);
     } catch (error) {
       console.error('Failed to load auction listings:', error);
+    }
+  };
+
+  const loadPendingPayments = async () => {
+    try {
+      const payments = await fetchPendingPayments();
+      setPendingPayments(payments);
+    } catch (error) {
+      console.error('Failed to load pending payments:', error);
     }
   };
 
@@ -342,6 +355,32 @@ export function EstablishmentDashboard({
   const handleCancelAuction = async (_tokenId: string) => {
     // TODO: Implement cancel auction functionality
     toast.info('Cancel auction feature coming soon');
+  };
+
+  const handleCreatePaymentCheck = async (payment: MaturityPayment) => {
+    try {
+      setCreatingCheckFor(payment.payment_id);
+      toast.loading('Creating payment Check on XRPL...', { id: 'create-check' });
+
+      const result = await createMaturityPaymentCheck(
+        payment.payment_id,
+        payment.creditor_address,
+        payment.payment_amount
+      );
+
+      if (result.success) {
+        toast.success(result.message, { id: 'create-check' });
+        // Reload pending payments
+        await loadPendingPayments();
+      } else {
+        toast.error(result.message, { id: 'create-check' });
+      }
+    } catch (error) {
+      console.error('Error creating payment Check:', error);
+      toast.error('Failed to create payment Check', { id: 'create-check' });
+    } finally {
+      setCreatingCheckFor(null);
+    }
   };
 
   // Get current bid for a listing
@@ -701,6 +740,113 @@ export function EstablishmentDashboard({
               <Package className="w-16 h-16 text-gray-700 mx-auto mb-4" />
               <p className="text-gray-400">No receivables yet</p>
               <p className="text-xs text-gray-500 mt-2">Receivables will appear here when other establishments issue invoices to you</p>
+            </div>
+          )}
+        </div>
+
+        {/* Payments Due Section */}
+        <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
+          <div className="mb-6">
+            <h2 className="text-2xl text-white mb-2 flex items-center gap-2">
+              <DollarSign className="w-6 h-6 text-red-400" />
+              Payments Due
+            </h2>
+            <p className="text-sm text-gray-400">
+              Maturity payments you need to make - NFTs that have reached maturity date
+            </p>
+          </div>
+
+          {pendingPayments.length > 0 ? (
+            <div className="space-y-4">
+              {pendingPayments.map((payment) => {
+                const isOverdue = payment.check_status === 'overdue';
+                const maturityDate = new Date(payment.maturity_date);
+                const daysOverdue = isOverdue
+                  ? Math.floor((Date.now() - maturityDate.getTime()) / (1000 * 60 * 60 * 24))
+                  : 0;
+
+                return (
+                  <div
+                    key={payment.payment_id}
+                    className={`p-6 rounded-lg border-2 ${
+                      isOverdue
+                        ? 'bg-red-950/30 border-red-900/50'
+                        : 'bg-gray-800/50 border-gray-700'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between mb-4">
+                      <div>
+                        <div className="text-white font-medium mb-1">
+                          {payment.NFTOKEN?.invoice_number || 'Invoice NFT'}
+                        </div>
+                        <div className="text-sm text-gray-400">
+                          Payment to: {payment.creditor_address.substring(0, 15)}...
+                        </div>
+                      </div>
+                      <span
+                        className={`px-3 py-1 rounded-full text-xs ${
+                          isOverdue
+                            ? 'bg-red-950/50 text-red-400 border border-red-900/50'
+                            : 'bg-yellow-950/50 text-yellow-400 border border-yellow-900/50'
+                        }`}
+                      >
+                        {isOverdue ? `${daysOverdue}d OVERDUE` : 'Payment Due'}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                      <div>
+                        <div className="text-sm text-gray-400 mb-1">Amount Due</div>
+                        <div className="text-white text-lg font-medium">
+                          {payment.payment_amount.toLocaleString()} RLUSD
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-sm text-gray-400 mb-1">Maturity Date</div>
+                        <div className="text-white">
+                          {maturityDate.toLocaleDateString()}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-sm text-gray-400 mb-1">NFT ID</div>
+                        <div className="text-white text-sm font-mono">
+                          {payment.nftoken_id.substring(0, 20)}...
+                        </div>
+                      </div>
+                    </div>
+
+                    {isOverdue && (
+                      <div className="mb-4 p-3 bg-red-950/30 border border-red-900/50 rounded-lg flex items-start gap-2">
+                        <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+                        <div className="text-sm text-red-400">
+                          <strong>Overdue Payment:</strong> This payment is {daysOverdue} days past due. Please create the payment Check as soon as possible.
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="pt-4 border-t border-gray-700">
+                      <button
+                        onClick={() => handleCreatePaymentCheck(payment)}
+                        disabled={creatingCheckFor === payment.payment_id}
+                        className="px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {creatingCheckFor === payment.payment_id
+                          ? 'Creating Check...'
+                          : `Create Payment Check (${payment.payment_amount.toLocaleString()} RLUSD)`}
+                      </button>
+                      <p className="text-xs text-gray-500 mt-2">
+                        This will create an XRPL Check payable to the NFT holder. They can cash it to receive payment.
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="text-center py-12">
+              <DollarSign className="w-16 h-16 text-gray-700 mx-auto mb-4" />
+              <p className="text-gray-400">No pending payments</p>
+              <p className="text-xs text-gray-500 mt-2">Payments due will appear here when your issued NFTs reach maturity</p>
             </div>
           )}
         </div>

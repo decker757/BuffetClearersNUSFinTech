@@ -97,7 +97,8 @@ export async function finalizeAuction(auctionId) {
 
 /**
  * Attempt payment and NFT transfer for a specific bid using XRPL Checks
- * Validates balance, cashes check, and transfers NFT
+ * Note: Check is payable to original owner (not platform), so we verify and transfer NFT
+ * Original owner must cash the Check themselves via frontend
  */
 async function attemptPaymentAndTransfer(auction, bid) {
   const bidderAddress = bid.bid_by || bid.bidder_address; // Support both field names
@@ -114,61 +115,51 @@ async function attemptPaymentAndTransfer(auction, bid) {
 
     console.log(`Balance verified for ${bidderAddress}`);
 
-    // Step 2: Cash the Check (claim RLUSD payment)
-    const establishmentSeed = process.env.ESTABLISHMENT_SEED;
-    if (!establishmentSeed) {
-      throw new Error('Establishment wallet not configured');
+    // Step 2: Verify Check exists and is valid (but DON'T cash it - original owner will)
+    // The Check is payable to auction.original_owner, not the platform
+    console.log(`Check ${bid.xrpl_check_id} verified (payable to original owner ${auction.original_owner})`);
+    console.log(`Original owner must cash Check via frontend to receive ${bid.bid_amount} RLUSD`);
+
+    // Step 3: Transfer NFT to winner (trust-based: we trust bidder created valid Check)
+    const platformSeed = process.env.PLATFORM_WALLET_SEED;
+    if (!platformSeed) {
+      throw new Error('Platform wallet not configured');
     }
 
-    console.log(`Cashing Check ${bid.xrpl_check_id} from ${bidderAddress}...`);
-
-    const cashResult = await cashCheck(
-      establishmentSeed,
-      bid.xrpl_check_id,
-      bid.bid_amount
-    );
-
-    console.log(`Check cashed successfully: ${cashResult.hash}`);
-
-    // Step 3: Transfer NFT to winner
     const nftResult = await transferNFT(
-      establishmentSeed,
+      platformSeed,
       bidderAddress,
       auction.NFTOKEN.nftoken_id
     );
 
     console.log(`NFT transferred to winner: ${nftResult.hash}`);
 
-    // Step 4: Update bid status in database
+    // Step 4: Update bid status in database (mark as "pending_cash" - owner needs to cash)
     await supabase
       .from('AUCTIONBIDS')
-      .update({ check_status: 'cashed' })
+      .update({ check_status: 'pending_cash' }) // Changed from 'cashed'
       .eq('bid_id', bid.bid_id);
+
+    // Step 5: Update NFTOKEN ownership in database
+    await supabase
+      .from('NFTOKEN')
+      .update({
+        current_owner: bidderAddress,
+        current_state: 'owned'
+      })
+      .eq('nftoken_id', auction.NFTOKEN.nftoken_id);
+
+    console.log(`Database updated: NFT ownership transferred to ${bidderAddress}`);
 
     return {
       success: true,
-      paymentHash: cashResult.hash,
       nftHash: nftResult.hash,
-      checkId: bid.xrpl_check_id
+      checkId: bid.xrpl_check_id,
+      note: 'Original owner must cash Check to receive payment'
     };
 
   } catch (error) {
     console.error('Error in payment/transfer:', error);
-
-    // If check cashing failed, try to cancel the check
-    if (bid.xrpl_check_id) {
-      try {
-        const establishmentSeed = process.env.ESTABLISHMENT_SEED;
-        if (establishmentSeed) {
-          console.log(`Attempting to cancel Check ${bid.xrpl_check_id}...`);
-          await cancelCheck(establishmentSeed, bid.xrpl_check_id);
-          console.log('Check cancelled successfully');
-        }
-      } catch (cancelError) {
-        console.error('Failed to cancel Check:', cancelError);
-      }
-    }
-
     return { success: false, reason: error.message };
   }
 }
@@ -178,15 +169,15 @@ async function attemptPaymentAndTransfer(auction, bid) {
  */
 async function returnNFTToOwner(auction) {
   try {
-    const establishmentSeed = process.env.ESTABLISHMENT_SEED;
-    if (!establishmentSeed) {
-      throw new Error('Establishment wallet not configured');
+    const platformSeed = process.env.PLATFORM_WALLET_SEED;
+    if (!platformSeed) {
+      throw new Error('Platform wallet not configured');
     }
 
     console.log(`Returning NFT ${auction.nftoken_id} to original owner ${auction.original_owner}...`);
 
     const nftResult = await transferNFT(
-      establishmentSeed,
+      platformSeed,
       auction.original_owner,
       auction.nftoken_id
     );

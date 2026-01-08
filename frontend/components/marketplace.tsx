@@ -79,11 +79,17 @@ export function Marketplace({ userPublicKey, userRole }: { userPublicKey: string
       setPlacingBid(true);
       toast.loading('Creating RLUSD Check on XRPL...', { id: 'bid-process' });
 
-      // Use the new escrow-based bidding
+      // Validate original owner exists
+      if (!auction.original_owner) {
+        throw new Error('Original owner address not found for this auction');
+      }
+
+      // Use the new escrow-based bidding (Check payable to original NFT owner)
       const result = await placeBidWithEscrow(
         auction.aid.toString(),
         parseFloat(bidAmount),
-        auction.expiry || new Date().toISOString()
+        auction.expiry || new Date().toISOString(),
+        auction.original_owner // Payment goes to NFT owner, not platform
       );
 
       if (result.success) {

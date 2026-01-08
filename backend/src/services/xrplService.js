@@ -93,6 +93,30 @@ export async function transferNFT(fromSeed, toAddress, nftokenId) {
     // Create wallet from seed
     const wallet = xrpl.Wallet.fromSeed(fromSeed);
 
+    console.log('🔄 Attempting NFT transfer:');
+    console.log('  From wallet:', wallet.address);
+    console.log('  To address:', toAddress);
+    console.log('  NFT ID:', nftokenId);
+
+    // First, verify the wallet actually owns this NFT
+    const accountNFTs = await client.request({
+      command: 'account_nfts',
+      account: wallet.address
+    });
+
+    const nfts = accountNFTs.result.account_nfts || [];
+    const ownsNFT = nfts.some(nft => nft.NFTokenID === nftokenId);
+
+    console.log(`  Wallet owns ${nfts.length} NFT(s)`);
+    console.log('  Owns this NFT:', ownsNFT);
+
+    if (!ownsNFT) {
+      console.error('❌ NFT not found in source wallet!');
+      console.error('   Looking for:', nftokenId);
+      console.error('   Wallet has:', nfts.map(n => n.NFTokenID));
+      throw new Error(`NFT ${nftokenId} not found in wallet ${wallet.address}. Cannot create transfer offer.`);
+    }
+
     // Create NFT transfer offer
     const createOffer = {
       TransactionType: 'NFTokenCreateOffer',

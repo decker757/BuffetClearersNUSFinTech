@@ -5,6 +5,7 @@ import {
   getAuctionById,
   getAuctionBids,
   getUserBids,
+  getUserBidsHistory,
   placeBid,
   finalizeAuctionManually,
   processAllExpiredAuctions
@@ -18,6 +19,7 @@ router.get('/auctions', getActiveAuctions);
 
 // Protected routes (auth required) - must come before :id routes to avoid conflicts
 router.get('/auctions/user/bids', authenticateToken, getUserBids);
+router.get('/auctions/user/bids/history', authenticateToken, getUserBidsHistory);
 router.post('/auctions', authenticateToken, createAuction);
 
 // Public and protected routes with :id parameter - must come after specific paths

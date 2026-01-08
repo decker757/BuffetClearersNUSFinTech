@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Wallet, TrendingUp, Package, Gavel, CheckCircle, History, Timer } from 'lucide-react';
+import { Wallet, TrendingUp, Package, Gavel, CheckCircle, History, Timer, DollarSign } from 'lucide-react';
 import { getBidsByUser, getNFTokensByOwner } from '../../lib/database';
 import { AuctionBid, NFToken } from '../../lib/supabase';
 import { toast } from 'sonner';
+import { fetchPaymentsToCollect, cashMaturityPaymentCheck, MaturityPayment } from '../../utils/maturityPayment';
 
 export function CustomerDashboard({ 
   username,
@@ -13,11 +14,14 @@ export function CustomerDashboard({
   publicKey: string;
   onViewMarketplace: () => void;
 }) {
-  const [activeTab, setActiveTab] = useState<'won' | 'bidding' | 'past'>('won');
+  const [activeTab, setActiveTab] = useState<'won' | 'bidding' | 'past' | 'payments'>('bidding');
   const [ownedTokens, setOwnedTokens] = useState<NFToken[]>([]);
   const [activeBids, setActiveBids] = useState<AuctionBid[]>([]);
+  const [historicalBids, setHistoricalBids] = useState<AuctionBid[]>([]);
+  const [paymentsToCollect, setPaymentsToCollect] = useState<MaturityPayment[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentTime, setCurrentTime] = useState(Date.now());
+  const [cashingCheckFor, setCashingCheckFor] = useState<number | null>(null);
 
   // Update current time every minute
   useEffect(() => {
@@ -50,19 +54,54 @@ export function CustomerDashboard({
   const loadDashboardData = async () => {
     try {
       setLoading(true);
-      const [bids, tokens] = await Promise.all([
+      const [bids, history, tokens, payments] = await Promise.all([
         getBidsByUser(publicKey),
-        getNFTokensByOwner(publicKey)
+        fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:6767'}/auctions/user/bids/history`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
+        }).then(res => res.json()).then(data => data.bids || []).catch(() => []),
+        getNFTokensByOwner(publicKey),
+        fetchPaymentsToCollect().catch(() => []) // Don't fail if payments fetch fails
       ]);
 
       // Backend now returns only active bids (superseded bids are filtered out)
       setActiveBids(bids);
+      setHistoricalBids(history);
       setOwnedTokens(tokens);
+      setPaymentsToCollect(payments);
     } catch (error) {
       console.error('Failed to load dashboard data:', error);
       toast.error('Failed to load dashboard data');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Handler for cashing maturity payment Checks
+  const handleCashCheck = async (payment: MaturityPayment) => {
+    try {
+      setCashingCheckFor(payment.payment_id);
+      toast.loading('Cashing Check on XRPL...', { id: 'cash-check' });
+
+      const result = await cashMaturityPaymentCheck(
+        payment.payment_id,
+        payment.xrpl_check_id!,
+        payment.payment_amount
+      );
+
+      if (result.success) {
+        toast.success(result.message, { id: 'cash-check' });
+        // Reload data to update payments list
+        await loadDashboardData();
+      } else {
+        toast.error(result.message, { id: 'cash-check' });
+      }
+    } catch (error) {
+      console.error('Error cashing Check:', error);
+      toast.error('Failed to cash Check', { id: 'cash-check' });
+    } finally {
+      setCashingCheckFor(null);
     }
   };
 
@@ -175,19 +214,6 @@ export function CustomerDashboard({
         <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
           <div className="border-b border-gray-800 flex">
             <button
-              onClick={() => setActiveTab('won')}
-              className={`flex-1 px-6 py-4 text-sm transition-colors ${
-                activeTab === 'won'
-                  ? 'bg-gray-800 text-white border-b-2 border-blue-600'
-                  : 'text-gray-400 hover:text-white'
-              }`}
-            >
-              <div className="flex items-center justify-center gap-2">
-                <CheckCircle className="w-4 h-4" />
-                Won Auctions ({ownedTokens.length})
-              </div>
-            </button>
-            <button
               onClick={() => setActiveTab('bidding')}
               className={`flex-1 px-6 py-4 text-sm transition-colors ${
                 activeTab === 'bidding'
@@ -201,6 +227,32 @@ export function CustomerDashboard({
               </div>
             </button>
             <button
+              onClick={() => setActiveTab('won')}
+              className={`flex-1 px-6 py-4 text-sm transition-colors ${
+                activeTab === 'won'
+                  ? 'bg-gray-800 text-white border-b-2 border-blue-600'
+                  : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              <div className="flex items-center justify-center gap-2">
+                <CheckCircle className="w-4 h-4" />
+                Won Auctions ({ownedTokens.length})
+              </div>
+            </button>
+            <button
+              onClick={() => setActiveTab('payments')}
+              className={`flex-1 px-6 py-4 text-sm transition-colors ${
+                activeTab === 'payments'
+                  ? 'bg-gray-800 text-white border-b-2 border-blue-600'
+                  : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              <div className="flex items-center justify-center gap-2">
+                <DollarSign className="w-4 h-4" />
+                Collect Payments ({paymentsToCollect.length})
+              </div>
+            </button>
+            <button
               onClick={() => setActiveTab('past')}
               className={`flex-1 px-6 py-4 text-sm transition-colors ${
                 activeTab === 'past'
@@ -210,7 +262,7 @@ export function CustomerDashboard({
             >
               <div className="flex items-center justify-center gap-2">
                 <History className="w-4 h-4" />
-                History (0)
+                History ({historicalBids.length})
               </div>
             </button>
           </div>
@@ -364,12 +416,137 @@ export function CustomerDashboard({
               )
             )}
 
+            {/* Collect Payments Tab */}
+            {activeTab === 'payments' && (
+              paymentsToCollect.length > 0 ? (
+                <div className="space-y-4">
+                  {paymentsToCollect.map((payment) => {
+                    const checkCreatedDate = new Date(payment.check_created_at || '');
+
+                    return (
+                      <div key={payment.payment_id} className="p-6 bg-gray-800/50 border border-gray-700 rounded-lg">
+                        <div className="flex items-start justify-between mb-4">
+                          <div>
+                            <div className="text-white font-medium mb-1">
+                              {payment.NFTOKEN?.invoice_number || 'Invoice NFT'}
+                            </div>
+                            <div className="text-sm text-gray-400">
+                              Payment from: {payment.debtor_address.substring(0, 15)}...
+                            </div>
+                          </div>
+                          <span className="px-3 py-1 rounded-full text-xs bg-green-950/50 text-green-400 border border-green-900/50">
+                            Ready to Collect
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                          <div>
+                            <div className="text-sm text-gray-400 mb-1">Payment Amount</div>
+                            <div className="text-white text-lg font-medium">
+                              {payment.payment_amount.toLocaleString()} RLUSD
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-sm text-gray-400 mb-1">Check Created</div>
+                            <div className="text-white">
+                              {checkCreatedDate.toLocaleDateString()}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-sm text-gray-400 mb-1">Check ID</div>
+                            <div className="text-white text-sm font-mono">
+                              {payment.xrpl_check_id?.substring(0, 20)}...
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="mb-4 p-3 bg-green-950/30 border border-green-900/50 rounded-lg">
+                          <p className="text-sm text-green-400">
+                            <strong>Payment Ready:</strong> The debtor has created a Check for {payment.payment_amount.toLocaleString()} RLUSD. Cash it to receive your payment.
+                          </p>
+                        </div>
+
+                        <div className="pt-4 border-t border-gray-700">
+                          <button
+                            onClick={() => handleCashCheck(payment)}
+                            disabled={cashingCheckFor === payment.payment_id}
+                            className="px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {cashingCheckFor === payment.payment_id
+                              ? 'Cashing Check...'
+                              : `Cash Check (${payment.payment_amount.toLocaleString()} RLUSD)`}
+                          </button>
+                          <p className="text-xs text-gray-500 mt-2">
+                            This will cash the XRPL Check and transfer {payment.payment_amount.toLocaleString()} RLUSD to your wallet.
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <DollarSign className="w-16 h-16 text-gray-700 mx-auto mb-4" />
+                  <p className="text-gray-400 mb-4">No payments to collect</p>
+                  <p className="text-xs text-gray-500">
+                    Payments will appear here when NFTs you own reach maturity and debtors create payment Checks
+                  </p>
+                </div>
+              )
+            )}
+
             {/* Past Tab */}
             {activeTab === 'past' && (
-              <div className="text-center py-12">
-                <History className="w-16 h-16 text-gray-700 mx-auto mb-4" />
-                <p className="text-gray-400">No past transactions yet</p>
-              </div>
+              historicalBids.length > 0 ? (
+                <div className="space-y-4">
+                  {historicalBids.map((bid: any) => {
+                    const listing = bid.AUCTIONLISTING;
+                    const nftoken = listing?.NFTOKEN;
+                    const wasWinning = bid.bid_amount === listing?.current_bid;
+                    const status = listing?.status || 'unknown';
+
+                    return (
+                      <div key={bid.bid_id} className="p-6 bg-gray-800/50 border border-gray-700 rounded-lg">
+                        <div className="flex items-start justify-between mb-4">
+                          <div>
+                            <h3 className="text-lg text-white mb-1">
+                              {nftoken?.invoice_number || 'Unknown Invoice'} (Auction #{listing?.aid})
+                            </h3>
+                            <p className="text-sm text-gray-400">Face Value: {listing?.face_value?.toLocaleString()} RLUSD</p>
+                          </div>
+                          <div className={`px-3 py-1 rounded-full text-xs ${
+                            wasWinning && status === 'completed'
+                              ? 'bg-green-900/50 text-green-400 border border-green-800'
+                              : 'bg-gray-700 text-gray-400'
+                          }`}>
+                            {wasWinning && status === 'completed' ? 'Won' : 'Lost/Expired'}
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-4 text-sm">
+                          <div>
+                            <p className="text-gray-500 mb-1">Your Bid</p>
+                            <p className="text-white">{bid.bid_amount?.toLocaleString()} RLUSD</p>
+                          </div>
+                          <div>
+                            <p className="text-gray-500 mb-1">Final Price</p>
+                            <p className="text-white">{listing?.current_bid?.toLocaleString()} RLUSD</p>
+                          </div>
+                          <div>
+                            <p className="text-gray-500 mb-1">Issuer</p>
+                            <p className="text-white text-sm">{nftoken?.creator_username || 'Unknown'}</p>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <History className="w-16 h-16 text-gray-700 mx-auto mb-4" />
+                  <p className="text-gray-400">No past transactions yet</p>
+                </div>
+              )
             )}
           </div>
         </div>

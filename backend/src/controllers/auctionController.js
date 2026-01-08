@@ -91,7 +91,8 @@ export const getActiveAuctions = async (req, res) => {
           created_by
         )
       `)
-      .gte('expiry', now)
+      .eq('status', 'active')        // Only show active auctions
+      .gte('expiry', now)             // Not yet expired
       .order('time_created', { ascending: false });
 
     if (error) {
@@ -213,6 +214,7 @@ export const getAuctionBids = async (req, res) => {
 export const getUserBids = async (req, res) => {
   try {
     const { address } = req.user; // From JWT token
+    const now = new Date().toISOString();
 
     const { data, error } = await supabase
       .from('AUCTIONBIDS')
@@ -225,6 +227,7 @@ export const getUserBids = async (req, res) => {
           expiry,
           min_bid,
           current_bid,
+          status,
           NFTOKEN (
             invoice_number,
             image_link,
@@ -234,6 +237,8 @@ export const getUserBids = async (req, res) => {
       `)
       .eq('bid_by', address)
       .eq('check_status', 'active')
+      .eq('AUCTIONLISTING.status', 'active')  // Only active auctions
+      .gte('AUCTIONLISTING.expiry', now)       // Not yet expired
       .order('created_at', { ascending: false});
 
     if (error) {
@@ -481,5 +486,102 @@ export const processAllExpiredAuctions = async (req, res) => {
   } catch (error) {
     console.error('Error in processAllExpiredAuctions:', error);
     res.status(500).json({ error: 'Internal server error', message: error.message });
+  }
+};
+
+// Get historical (expired/completed) bids by a specific user
+export const getUserBidsHistory = async (req, res) => {
+  try {
+    const { address } = req.user; // From JWT token
+    const now = new Date().toISOString();
+
+    // Get all bids by user
+    const { data: allBids, error } = await supabase
+      .from('AUCTIONBIDS')
+      .select(`
+        *,
+        AUCTIONLISTING!inner (
+          aid,
+          nftoken_id,
+          face_value,
+          expiry,
+          min_bid,
+          current_bid,
+          status,
+          NFTOKEN (
+            invoice_number,
+            image_link,
+            created_by
+          )
+        )
+      `)
+      .eq('bid_by', address)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching user bid history:', error);
+      return res.status(500).json({ error: error.message });
+    }
+
+    // Filter for historical bids:
+    // 1. Auctions with status != 'active' (completed, unlisted)
+    // 2. OR active auctions that have expired
+    // 3. OR bids with check_status 'cashed' or 'pending_cash'
+    const data = allBids.filter(bid => {
+      const listing = bid.AUCTIONLISTING;
+      if (!listing) return false;
+
+      // Check if auction is not active (completed/unlisted)
+      if (listing.status !== 'active') return true;
+
+      // Check if auction has expired
+      if (listing.expiry && new Date(listing.expiry) < new Date(now)) return true;
+
+      // Check if bid was already processed
+      if (bid.check_status === 'cashed' || bid.check_status === 'pending_cash') return true;
+
+      return false;
+    });
+
+    // Fetch usernames for all creators
+    const creatorAddresses = [...new Set(
+      data
+        .filter(bid => bid.AUCTIONLISTING?.NFTOKEN?.created_by)
+        .map(bid => bid.AUCTIONLISTING.NFTOKEN.created_by)
+    )];
+
+    let usernameMap = {};
+    if (creatorAddresses.length > 0) {
+      const { data: users } = await supabase
+        .from('USER')
+        .select('publicKey, username')
+        .in('publicKey', creatorAddresses);
+
+      if (users) {
+        usernameMap = Object.fromEntries(
+          users.map(user => [user.publicKey, user.username])
+        );
+      }
+    }
+
+    // Add creator_username to each bid's NFTOKEN
+    const bidsWithUsernames = data.map(bid => ({
+      ...bid,
+      AUCTIONLISTING: bid.AUCTIONLISTING ? {
+        ...bid.AUCTIONLISTING,
+        NFTOKEN: bid.AUCTIONLISTING.NFTOKEN ? {
+          ...bid.AUCTIONLISTING.NFTOKEN,
+          creator_username: usernameMap[bid.AUCTIONLISTING.NFTOKEN.created_by] || 'Unknown'
+        } : null
+      } : null
+    }));
+
+    res.json({
+      success: true,
+      bids: bidsWithUsernames
+    });
+  } catch (error) {
+    console.error('Error in getUserBidsHistory:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 };

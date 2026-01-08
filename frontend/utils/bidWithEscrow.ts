@@ -38,12 +38,14 @@ export interface BidResult {
  * @param auctionId - The auction ID to bid on
  * @param bidAmount - The bid amount in RLUSD
  * @param auctionExpiry - The auction expiry timestamp (ISO string) - not used for Checks
+ * @param originalOwnerAddress - The original NFT owner's address (payment recipient)
  * @returns Promise<BidResult>
  */
 export async function placeBidWithEscrow(
   auctionId: string,
   bidAmount: number,
-  auctionExpiry: string
+  auctionExpiry: string,
+  originalOwnerAddress: string
 ): Promise<BidResult> {
   let client: xrpl.Client | null = null;
 
@@ -90,10 +92,11 @@ export async function placeBidWithEscrow(
     console.log(`Balance verified: ${balanceCheck.balance} RLUSD`);
 
     // Step 5: Create Check transaction (supports RLUSD!)
+    // IMPORTANT: Check is payable to original NFT owner, NOT platform
     const checkTx: xrpl.CheckCreate = {
       TransactionType: 'CheckCreate',
       Account: wallet.address,
-      Destination: PLATFORM_WALLET_ADDRESS,
+      Destination: originalOwnerAddress, // Payment goes to original NFT owner
       SendMax: {
         currency: RLUSD_CURRENCY,
         value: bidAmount.toString(),
@@ -101,7 +104,7 @@ export async function placeBidWithEscrow(
       }
     };
 
-    console.log('Preparing Check transaction:', checkTx);
+    console.log('Preparing Check transaction (payable to NFT owner):', checkTx);
 
     // Step 6: Autofill, sign, and submit Check
     const prepared = await client.autofill(checkTx);

@@ -8,8 +8,10 @@ import { connectXRPL } from "./config/xrplClient.js";
 import authRoutes from "./routes/auth.js";
 import auctionRoutes from "./routes/auctions.js";
 import nftRoutes from "./routes/nft.js";
+import maturityPaymentRoutes from "./routes/maturityPayments.js";
 import { authenticateToken } from "./middleware/auth.js";
 import { startAuctionScheduler } from "./jobs/auctionScheduler.js";
+import { startMaturityPaymentScheduler } from "./jobs/maturityPaymentScheduler.js";
 
 const app = express();
 
@@ -30,6 +32,9 @@ app.use("/", auctionRoutes);
 
 // NFT routes
 app.use("/nft", nftRoutes);
+
+// Maturity payment routes
+app.use("/", maturityPaymentRoutes);
 
 // Protected route example
 app.get("/protected", authenticateToken, (req, res) => {
@@ -53,6 +58,9 @@ app.listen(PORT, async () => {
 
   // Start the auction finalization scheduler
   startAuctionScheduler();
+
+  // Start the maturity payment scheduler
+  startMaturityPaymentScheduler();
 });
 
 export default app;

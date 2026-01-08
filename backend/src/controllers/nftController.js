@@ -470,7 +470,14 @@ export async function listNFTOnAuction(req, res) {
     };
 
     console.log('  Submitting NFTokenAcceptOffer transaction...');
-    const result = await client.submitAndWait(acceptOfferTx, { wallet: platformWallet });
+
+    let result;
+    try {
+      result = await client.submitAndWait(acceptOfferTx, { wallet: platformWallet });
+    } catch (error) {
+      console.error('❌ Failed to accept NFT offer:', error);
+      throw new Error(`Platform failed to accept NFT offer: ${error.message}. The offer may have expired or been cancelled.`);
+    }
 
     console.log('✓ Transaction validated:', result.result.hash);
 
@@ -478,8 +485,10 @@ export async function listNFTOnAuction(req, res) {
     if (result.result.meta && typeof result.result.meta === 'object') {
       const meta = result.result.meta;
       if (meta.TransactionResult !== 'tesSUCCESS') {
-        throw new Error(`Transaction failed with result: ${meta.TransactionResult}`);
+        throw new Error(`NFT transfer failed: ${meta.TransactionResult}. Please try listing again.`);
       }
+    } else {
+      throw new Error('NFT transfer result unclear. Please verify manually before listing.');
     }
 
     const acceptTxHash = result.result.hash;
@@ -496,11 +505,17 @@ export async function listNFTOnAuction(req, res) {
     const platformOwnsNFT = platformNFTs.some((nft) => nft.NFTokenID === nftokenId);
 
     if (!platformOwnsNFT) {
-      // This shouldn't happen if transaction succeeded, but check anyway
-      throw new Error('NFT not found in platform wallet after accepting offer. Transaction may need more time to validate.');
+      // CRITICAL: NFT not in platform wallet - DO NOT proceed with listing
+      console.error('❌ CRITICAL: NFT not found in platform wallet!');
+      console.error('   Expected NFT:', nftokenId);
+      console.error('   Platform wallet:', platformWallet.address);
+      console.error('   Platform owns:', platformNFTs.length, 'NFTs');
+
+      throw new Error('❌ FAILED: NFT did not transfer to platform wallet. Listing cancelled. Please try again.');
     }
 
     console.log('✓ NFT successfully transferred to platform wallet');
+    console.log(`   Platform now owns ${platformNFTs.length} NFT(s)`);
 
     // Step 5: Update NFT state in database
     console.log('\n[Step 5] Updating NFT state in database...');
