@@ -46,26 +46,96 @@ This follows the **invoice factoring** economic model, implemented using XRPL pr
 
 ---
 
-## XRPL Features Used
-This project is intentionally built using **XRPL native primitives**, without general-purpose smart contracts.
+## **Features & XRPL Usage**
 
-### XRPL Primitives
-- NFTs (`NFToken`)
-- Issued Tokens (RLUSD-style mock)
-- Trustlines
-- Escrow
-- Wallet-based authentication
+Below is a breakdown of InvoiceNFT’s core features and the specific XRPL primitives used to implement each one.
 
 ---
 
-## XRPL Transactions Used
-- `NFTokenMint`
-- `TrustSet`
-- `Payment`
-- `EscrowCreate`
-- `EscrowFinish`
+### 🧾 **Invoice Tokenization (NFTs)**
+
+- **What it does:**  
+  Converts real-world invoices into unique on-chain assets that represent the right to receive future payment.
+
+- **XRPL primitives used:**  
+  - `NFTokenMint` (XLS-20 NFTs)
+
+- **How we use it:**  
+  Each invoice is minted as an XRPL NFT. The NFT’s URI links to metadata containing the invoice number, face value, maturity date, and image. Ownership of the NFT determines who is entitled to payment.
 
 ---
+
+### 🏷️ **Auction-Based Invoice Marketplace**
+
+- **What it does:**  
+  Allows invoice NFTs to be listed and auctioned so businesses can access liquidity earlier.
+
+- **XRPL primitives used:**  
+  - `NFTokenCreateOffer`  
+  - `NFTokenAcceptOffer`
+
+- **How we use it:**  
+  When an auction ends, ownership of the invoice NFT is transferred on-ledger to the winning bidder. The ledger records the ownership change, ensuring transparent and auditable provenance.
+
+---
+
+### 💰 **Issued Token Payments (RLUSD-style)**
+
+- **What it does:**  
+  Enables stable-value bidding and settlement for invoice purchases.
+
+- **XRPL primitives used:**  
+  - Issued tokens  
+  - `TrustSet` (trustlines)  
+  - `Payment` transactions (issued currency)
+
+- **How we use it:**  
+  Investors bid using an issued stable-value token. Trustlines ensure only approved wallets can hold and transact the token. Payments are settled directly on XRPL.
+
+---
+
+### 🔐 **Non-Custodial Wallet Authentication**
+
+- **What it does:**  
+  Allows users to authenticate and transact without sharing private keys.
+
+- **XRPL primitives used:**  
+  - Wallet signature verification (off-ledger cryptographic signing)
+
+- **How we use it:**  
+  Users authenticate by signing a challenge with their XRPL wallet. The platform verifies the signature and never stores private keys.
+
+---
+
+### 🔄 **On-Chain Ownership & Payment Entitlement**
+
+- **What it does:**  
+  Ensures the current NFT holder is always the party entitled to receive payment at maturity.
+
+- **XRPL primitives used:**  
+  - NFT ownership records  
+  - Issued token payments
+
+- **How we use it:**  
+  At invoice maturity, the debtor sends payment directly to the wallet holding the invoice NFT. No additional contracts or intermediaries are required.
+
+---
+
+### ⏳ **Escrow-Based Settlement (Designed / Optional)**
+
+- **What it does:**  
+  Prevents unpaid winning bids and enforces settlement guarantees.
+
+- **XRPL primitives used:**  
+  - `EscrowCreate`  
+  - `EscrowFinish`  
+  - `EscrowCancel`
+
+- **How we use it:**  
+  The system is designed so winning bidders can be required to lock funds in escrow. If settlement conditions are met, escrow is released; otherwise, it is cancelled and the next valid bidder can be selected.
+
+---
+
 
 ## Architecture Overview
 
