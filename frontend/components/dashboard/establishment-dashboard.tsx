@@ -3,7 +3,7 @@ import { Plus, FileText, Package, Eye, Settings, X, Shield, Timer, TrendingUp } 
 import { IssueTokenModal } from './issue-token-modal';
 import { ListTokenModal } from './list-token-modal';
 import { EstablishmentSettingsModal } from './establishment-settings-modal';
-import { getNFTokensByCreator, getNFTokensByOwner, createNFToken, createAuctionListing, getAuctionListingsByCreator, getBidsByAuction } from '../../lib/database';
+import { getNFTokensByCreator, getNFTokensByOwner, createNFToken, createAuctionListing, getAuctionListingsByCreator, getBidCountsByAuctions } from '../../lib/database';
 import { NFToken, AuctionListingWithNFT } from '../../lib/supabase';
 import { mintInvoiceNFT } from '../../lib/api';
 import { toast } from 'sonner';
@@ -89,12 +89,10 @@ export function EstablishmentDashboard({
       setAuctionListings(listings);
 
       // Load bid counts for each listing
-      const counts: Record<string, number> = {};
-      for (const listing of listings) {
-        const bids = await getBidsByAuction(listing.aid);
-        counts[listing.nftoken_id || ''] = bids.length;
-      }
+      const aids = listings.map(l => l.aid);
+      const counts = await getBidCountsByAuctions(aids);
       setBidCounts(counts);
+
     } catch (error) {
       console.error('Failed to load auction listings:', error);
     }
