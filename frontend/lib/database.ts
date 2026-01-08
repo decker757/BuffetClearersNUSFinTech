@@ -286,17 +286,28 @@ export async function placeBid(aid: number, bid_amount: number, bid_by: string) 
   return bidData as AuctionBid;
 }
 
-export async function getBidCountsByAuctions(aids: number[]) {
+export async function getBidCountsByAuctions(aids: number[]): Promise<Record<number, number>> {
   checkSupabaseConfig();
-  
-  // Get counts grouped by aid
+
+  if (aids.length === 0) {
+    return {};
+  }
+
+  // Get all bids for these auctions
   const { data, error } = await supabase
     .from('AUCTIONBIDS')
     .select('aid')
     .in('aid', aids);
 
   if (error) throw error;
-  return data as AuctionBid[];
+
+  // Count bids by auction ID
+  const counts: Record<number, number> = {};
+  for (const bid of data || []) {
+    counts[bid.aid] = (counts[bid.aid] || 0) + 1;
+  }
+
+  return counts;
 }
 
 export async function getBidsByUser(_publicKey: string) {

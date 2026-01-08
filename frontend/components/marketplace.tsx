@@ -1,11 +1,10 @@
 import { useState, useEffect } from 'react';
 import { ChevronDown, TrendingUp, Clock, X, Calendar, FileText, Shield, DollarSign, Timer, AlertCircle, Loader2 } from 'lucide-react';
 import { UserRole } from './auth/onboarding';
-import { getActiveAuctionListings, placeBid, getBidCountsByAuctions, getBidsByUser } from '../lib/database';
+import { getActiveAuctionListings, getBidCountsByAuctions } from '../lib/database';
 import { AuctionListingWithNFT } from '../lib/supabase';
 import { toast } from 'sonner';
 import { placeBidWithEscrow } from '../utils/bidWithEscrow';
-
 
 export function Marketplace({ userPublicKey, userRole }: { userPublicKey: string | null, userRole: UserRole | null }) {
   const [sortBy, setSortBy] = useState('recently-added');
