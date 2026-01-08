@@ -1,4 +1,4 @@
-# XRPL Invoice NFT Auction Platform
+# XRPL Invoice NFT Auction Platform -- Operating on Testnet
 **Tokenizing future invoices into tradable on-chain assets**
 
 ---
@@ -38,14 +38,21 @@ This follows the **invoice factoring** economic model, implemented using XRPL pr
 ---
 
 ## High-Level Flow
-1. An establishment mints an **Invoice NFT** representing a future payment  
-2. The NFT is listed on an **auction marketplace** with a defined expiry  
-3. Investors place bids using an **issued stable token** (RLUSD-style, testnet/mock)  
-4. At auction close, **payment and NFT transfer are coordinated** (DVP-style)  
-5. Post-auction, the payer may **fund escrow** to guarantee settlement (demo flow)  
+
+1. An establishment mints an **Invoice NFT** on the XRP Ledger representing a real-world accounts receivable with a fixed amount and maturity date.
+2. The Invoice NFT is listed on an **on-chain auction marketplace** with a defined bidding period.
+3. Investors place bids using an **issued stable token (RLUSD-style, testnet/mock)**, with bids secured via XRPL escrows.
+4. At auction close, **delivery-versus-payment (DVP)** is executed: the highest bidder receives the NFT and the seller receives payment.
+5. Upon NFT maturity, the **current NFT holder is entitled to receive the underlying payment** from the originating establishment, completing the settlement of the tokenized real-world asset.
 
 ---
 
+## Overall Flow Diagram
+<img width="2465" height="1346" alt="image" src="https://github.com/user-attachments/assets/62f3c9c1-42b4-4e1f-874f-d3d1bc9d06cc" />
+
+---
+## XRPL Features Used
+This project is intentionally built using **XRPL native primitives**, without general-purpose smart contracts.
 ## **Features & XRPL Usage**
 
 Below is a breakdown of InvoiceNFT’s core features and the specific XRPL primitives used to implement each one.
