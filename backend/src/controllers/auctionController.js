@@ -131,11 +131,11 @@ export const getAuctionBids = async (req, res) => {
     const { data, error } = await supabase
       .from('AUCTIONBIDS')
       .select(`
-        *,
-        USER!AUCTIONBIDS_bid_by_fkey (
-          publicKey,
-          username
-        )
+        bid_id,
+        aid,
+        bid_amount,
+        bid_by,
+        created_at
       `)
       .eq('aid', id)
       .order('created_at', { ascending: false });
