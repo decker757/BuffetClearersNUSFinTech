@@ -5,6 +5,8 @@ import { storeChallenge, getChallenge, deleteChallenge } from "../utils/challeng
 // JWT secret (should be in .env in production)
 const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-change-in-production";
 
+console.log('🔑 [AUTH CONTROLLER] JWT_SECRET loaded:', JWT_SECRET);
+
 // Generate authentication challenge
 export function generateChallenge(req, res) {
   const { address } = req.body;
@@ -60,11 +62,14 @@ export function verifySignature(req, res) {
       deleteChallenge(address);
 
       // Generate JWT token
+      console.log('🔑 Creating JWT token with secret:', JWT_SECRET);
       const token = jwt.sign(
         { address, timestamp: Date.now() },
         JWT_SECRET,
         { expiresIn: "24h" }
       );
+
+      console.log('✅ Token created:', token.slice(0, 50) + '...');
 
       res.json({
         success: true,

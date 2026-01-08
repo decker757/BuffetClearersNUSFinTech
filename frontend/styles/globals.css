@@ -188,3 +188,20 @@
 html {
   font-size: var(--font-size);
 }
+
+/* Equal height grid items - Simple and reliable solution */
+.equal-height-grid > * > * {
+  min-height: 100%;
+}
+
+@media (min-width: 1024px) {
+  .equal-height-grid.lg\:grid-cols-4 > * > * {
+    min-height: 280px;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  .equal-height-grid.md\:grid-cols-2 > * > * {
+    min-height: 260px;
+  }
+}
