@@ -1,5 +1,5 @@
 import express from 'express';
-import { mintInvoiceNFT, getNFTDetails, verifyNFTOwnership } from '../controllers/nftController.js';
+import { mintInvoiceNFT, getNFTDetails, verifyNFTOwnership, listNFTOnAuction } from '../controllers/nftController.js';
 import { authenticateToken } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -22,6 +22,13 @@ router.post('/mint', (req, res, next) => {
  * Protected route - requires authentication
  */
 router.post('/verify-ownership', authenticateToken, verifyNFTOwnership);
+
+/**
+ * POST /nft/list-on-auction
+ * List an owned NFT on auction by transferring to platform wallet
+ * Protected route - requires authentication
+ */
+router.post('/list-on-auction', authenticateToken, listNFTOnAuction);
 
 /**
  * GET /nft/:nftokenId

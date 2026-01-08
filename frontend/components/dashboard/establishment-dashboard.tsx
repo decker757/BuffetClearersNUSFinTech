@@ -7,8 +7,11 @@ import { AcceptNFTModal } from './accept-nft-modal';
 import { getNFTokensByCreator, getNFTokensByOwner, createNFToken, createAuctionListing, getAuctionListingsByCreator, getBidsByAuction } from '../../lib/database';
 import { NFToken, AuctionListingWithNFT } from '../../lib/supabase';
 import { mintInvoiceNFT, authenticatedFetch } from '../../lib/api';
-import { findNFTSellOffers, acceptNFTOffer } from '../../lib/xrpl-nft';
+import { findNFTSellOffers, acceptNFTOffer, createSellOfferToPlatform } from '../../lib/xrpl-nft';
 import { toast } from 'sonner';
+
+// Platform wallet address from backend
+const PLATFORM_ADDRESS = 'rJoESWx9ZKHpEyNrLWBTA95XLxwoKJj59u';
 
 interface EstablishmentInfo {
   name: string;
@@ -176,30 +179,76 @@ export function EstablishmentDashboard({
     }
   };
 
-  const handleListToken = async (tokenId: string, listingPrice: number, auctionExpiry: string) => {
+  const handleListToken = async (tokenId: string, minBid: number, auctionExpiry: string, walletSeed: string) => {
     try {
+      console.log('🔄 Starting NFT listing process');
+      console.log('  NFToken ID:', tokenId);
+      console.log('  Min Bid:', minBid);
+      console.log('  Expiry:', auctionExpiry);
+
       const token = ownedTokens.find(t => t.nftoken_id === tokenId);
       if (!token) {
         toast.error('Token not found');
         return;
       }
 
-      // Create auction listing
-      await createAuctionListing({
-        nftoken_id: tokenId,
-        face_value: token.face_value,
-        expiry: auctionExpiry,
-        min_bid: listingPrice,
-        current_bid: listingPrice
+      // Show loading toast
+      const loadingToast = toast.loading('Creating sell offer to platform...');
+
+      // Step 1: Create sell offer to platform (user signs transaction)
+      console.log('  Creating sell offer to platform...');
+      const offerResult = await createSellOfferToPlatform({
+        nftokenId: tokenId,
+        walletSeed,
+        platformAddress: PLATFORM_ADDRESS
       });
 
-      toast.success('Token listed on auction successfully!');
+      if (!offerResult.success || !offerResult.offerIndex) {
+        toast.dismiss(loadingToast);
+        throw new Error(offerResult.error || 'Failed to create sell offer');
+      }
+
+      console.log('✅ Sell offer created! Offer Index:', offerResult.offerIndex);
+      toast.dismiss(loadingToast);
+
+      // Step 2: Send to backend for platform to accept
+      const loadingToast2 = toast.loading('Platform accepting offer and listing on auction...');
+
+      // Convert date string to ISO format with time
+      const expiryDate = new Date(auctionExpiry);
+      expiryDate.setHours(23, 59, 59, 999); // End of day
+      const expiryISO = expiryDate.toISOString();
+
+      const response = await authenticatedFetch('/nft/list-on-auction', {
+        method: 'POST',
+        body: JSON.stringify({
+          nftokenId: tokenId,
+          offerIndex: offerResult.offerIndex,
+          minBid,
+          expiry: expiryISO
+        })
+      });
+
+      toast.dismiss(loadingToast2);
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to list NFT on auction');
+      }
+
+      const result = await response.json();
+      console.log('✅ NFT listed on auction:', result);
+
+      toast.success('NFT listed on auction successfully! Platform has custody.');
       setShowListModal(false);
       setSelectedToken(null);
+
+      // Reload data to update the UI
       await loadAllData();
+
     } catch (error) {
       console.error('Failed to list token:', error);
-      toast.error('Failed to list token. Please try again.');
+      toast.error(`Failed to list token: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
 

@@ -122,3 +122,90 @@ export async function getNFTOwner(nftokenId: string, ownerAddress: string): Prom
     await client.disconnect();
   }
 }
+
+/**
+ * Create a sell offer to transfer NFT to platform wallet
+ * User must provide their wallet seed to sign the transaction
+ */
+export async function createSellOfferToPlatform(params: {
+  nftokenId: string;
+  walletSeed: string;
+  platformAddress: string;
+}): Promise<{
+  success: boolean;
+  offerIndex?: string;
+  txHash?: string;
+  error?: string;
+}> {
+  const client = new xrpl.Client(XRPL_NETWORK);
+
+  try {
+    await client.connect();
+    console.log('🔗 Connected to XRPL');
+
+    // Create wallet from seed
+    const wallet = xrpl.Wallet.fromSeed(params.walletSeed);
+    console.log('👛 Wallet address:', wallet.address);
+
+    // Create NFTokenCreateOffer transaction (sell offer to platform for 0 XRP)
+    const createOfferTx: xrpl.NFTokenCreateOffer = {
+      TransactionType: 'NFTokenCreateOffer',
+      Account: wallet.address,
+      NFTokenID: params.nftokenId,
+      Amount: '0', // Platform takes custody for free
+      Destination: params.platformAddress, // Only platform can accept this offer
+      Flags: 1, // tfSellNFToken flag
+    };
+
+    console.log('📝 Creating sell offer to platform...');
+    console.log('  Platform destination:', params.platformAddress);
+
+    // Submit and wait for validation
+    const result = await client.submitAndWait(createOfferTx, { wallet });
+
+    console.log('✅ Transaction validated:', result.result.hash);
+
+    // Extract offer index from transaction metadata
+    let offerIndex: string | undefined;
+
+    if (result.result.meta && typeof result.result.meta === 'object') {
+      const meta = result.result.meta as any;
+
+      // Check transaction success
+      if (meta.TransactionResult !== 'tesSUCCESS') {
+        throw new Error(`Transaction failed: ${meta.TransactionResult}`);
+      }
+
+      // Find the created offer in AffectedNodes
+      if (meta.AffectedNodes) {
+        for (const node of meta.AffectedNodes) {
+          if (node.CreatedNode && node.CreatedNode.LedgerEntryType === 'NFTokenOffer') {
+            offerIndex = node.CreatedNode.LedgerIndex;
+            break;
+          }
+        }
+      }
+    }
+
+    if (!offerIndex) {
+      throw new Error('Could not extract offer index from transaction result');
+    }
+
+    console.log('✅ Sell offer created! Offer Index:', offerIndex);
+
+    return {
+      success: true,
+      offerIndex,
+      txHash: result.result.hash,
+    };
+
+  } catch (error) {
+    console.error('❌ Error creating sell offer:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error occurred',
+    };
+  } finally {
+    await client.disconnect();
+  }
+}
