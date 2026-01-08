@@ -35,7 +35,7 @@ case $choice in
         echo ""
         echo "📦 Deploying Backend to Railway..."
         cd backend
-        railway login
+        railway login --browserless
         railway up
         echo ""
         echo "✅ Backend deployed!"
