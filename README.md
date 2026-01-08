@@ -1,20 +1,20 @@
-# XRPL Invoice NFT Auction Platform -- Operating on Testnet
+# RLFactor — XRPL Invoice NFT Auction Platform — Operating on Testnet
 **Tokenizing future invoices into tradable on-chain assets**
 
 ---
 
 ## TL;DR
-This MVP demonstrates how the **XRP Ledger (XRPL)** can be used to tokenize, auction, and settle future invoice payments using **native XRPL features only** — including NFTs (NFToken), issued tokens (RLUSD-style mock), trustlines, wallet-based authentication, and escrow.
+This MVP demonstrates how the **XRP Ledger (XRPL)** can be used to tokenize, auction, and settle future invoice payments using **native XRPL features** — including NFTs (NFToken), issued tokens (RLUSD-style mock), trustlines and wallet-based authentication.
 
 Businesses convert unpaid invoices into immediate liquidity, while investors acquire future payment rights at a discount — with ownership and settlement transparently handled on-chain.
 
 ---
 
 ## The Problem
-Small and medium businesses often wait **30–90 days** to receive payment after issuing invoices.
+Small and medium businesses often wait **30–90 days** to receive payment after issuing invoices even though they've already delivered goods/services. 
 
 During this period:
-- Cash flow is constrained  
+- Cash flow is constrained
 - Financing options are centralized and opaque  
 - Settlement lacks transparency  
 
@@ -55,20 +55,26 @@ This follows the **invoice factoring** economic model, implemented using XRPL pr
 This project is intentionally built using **XRPL native primitives**, without general-purpose smart contracts.
 ## **Features & XRPL Usage**
 
-Below is a breakdown of InvoiceNFT’s core features and the specific XRPL primitives used to implement each one.
+Below is a breakdown of RLFactor’s core features and the specific XRPL primitives used to implement each one.
 
 ---
 
-### 🧾 **Invoice Tokenization (NFTs)**
+### 🧾 **Invoice Real World Asset Tokenization (NFTs)**
 
 - **What it does:**  
-  Converts real-world invoices into unique on-chain assets that represent the right to receive future payment.
+  Converts real-world invoices into unique on-chain assets (NFTs) that represent the right to receive future payment.
 
 - **XRPL primitives used:**  
   - `NFTokenMint` (XLS-20 NFTs)
 
 - **How we use it:**  
-  Each invoice is minted as an XRPL NFT. The NFT’s URI links to metadata containing the invoice number, face value, maturity date, and image. Ownership of the NFT determines who is entitled to payment.
+  Each invoice is minted as an XRPL NFT. The NFT’s URI links to metadata containing the invoice number, face value, maturity date, mintTxHash, issuer, offer index and image. Ownership of the NFT determines who is entitled to payment when the maturity date is reached.
+
+- **Viewing Created NFTs on Dashboard**
+  <img width="2458" height="1306" alt="image" src="https://github.com/user-attachments/assets/585bfdca-d1e5-4fa5-a1ff-22a1844ce6aa" />
+
+- **Created NFTs can also be found on Testnet**
+  <img width="2244" height="1414" alt="image" src="https://github.com/user-attachments/assets/0bfb446c-2bf8-4608-859a-747190797b6b" />
 
 ---
 
@@ -81,8 +87,16 @@ Below is a breakdown of InvoiceNFT’s core features and the specific XRPL primi
   - `NFTokenCreateOffer`  
   - `NFTokenAcceptOffer`
 
-- **How we use it:**  
-  When an auction ends, ownership of the invoice NFT is transferred on-ledger to the winning bidder. The ledger records the ownership change, ensuring transparent and auditable provenance.
+- **How we use it:**
+  When an auction starts, the invoice NFT is placed into an on-ledger auction state by creating a sell offer, preventing arbitrary transfers during the bidding period.
+
+  When the auction ends, the winning bid is accepted and ownership of the invoice NFT is transferred on-ledger to the winning bidder. The XRP Ledger records each ownership change, ensuring transparent and auditable provenance.
+
+> Note: For MVP simplicity, the platform temporarily holds NFTs during auctions. This can be replaced with a fully non-custodial flow using XRPL offers in future iterations.
+
+- **Example of NFTs listed on Auction**
+  <img width="1328" height="1140" alt="image" src="https://github.com/user-attachments/assets/b1d628ff-5b4b-4015-81b9-9d4de6d3e162" />
+
 
 ---
 
@@ -97,7 +111,10 @@ Below is a breakdown of InvoiceNFT’s core features and the specific XRPL primi
   - `Payment` transactions (issued currency)
 
 - **How we use it:**  
-  Investors bid using an issued stable-value token. Trustlines ensure only approved wallets can hold and transact the token. Payments are settled directly on XRPL.
+  Investors bid using an issued stable-value token (RLUSD). Trustlines ensure only approved wallets can hold and transact the token. Payments are settled directly on XRPL.
+
+- **Example of Bid Placement**
+  <img width="1237" height="525" alt="image" src="https://github.com/user-attachments/assets/adcd6f9a-d313-44eb-80e2-9994323d9db2" />
 
 ---
 
@@ -110,7 +127,7 @@ Below is a breakdown of InvoiceNFT’s core features and the specific XRPL primi
   - Wallet signature verification (off-ledger cryptographic signing)
 
 - **How we use it:**  
-  Users authenticate by signing a challenge with their XRPL wallet. The platform verifies the signature and never stores private keys.
+  Users authenticate by signing a challenge with their XRPL wallet to log in. The platform verifies the signature and never stores private keys.
 
 ---
 
@@ -124,32 +141,18 @@ Below is a breakdown of InvoiceNFT’s core features and the specific XRPL primi
   - Issued token payments
 
 - **How we use it:**  
-  At invoice maturity, the debtor sends payment directly to the wallet holding the invoice NFT. No additional contracts or intermediaries are required.
+  At invoice maturity, the debtor sends payment directly in RLUSD to the wallet holding the invoice NFT. No additional contracts or intermediaries are required.
+
+- **Example of outstanding Receivables(tied to owned NFTs) for an Investor Account**
+  <img width="1280" height="762" alt="image" src="https://github.com/user-attachments/assets/15b31b86-ab78-4375-9626-e4ab7a8ed5d3" />
 
 ---
-
-### ⏳ **Escrow-Based Settlement (Designed / Optional)**
-
-- **What it does:**  
-  Prevents unpaid winning bids and enforces settlement guarantees.
-
-- **XRPL primitives used:**  
-  - `EscrowCreate`  
-  - `EscrowFinish`  
-  - `EscrowCancel`
-
-- **How we use it:**  
-  The system is designed so winning bidders can be required to lock funds in escrow. If settlement conditions are met, escrow is released; otherwise, it is cancelled and the next valid bidder can be selected.
-
----
-
 
 ## Architecture Overview
 
 ### On-Chain (XRPL = Source of Truth)
 - NFT existence and ownership  
 - Issued token balances  
-- Escrowed funds  
 - Transaction history  
 
 ### Off-Chain (Application & Backend)
@@ -157,7 +160,7 @@ Below is a breakdown of InvoiceNFT’s core features and the specific XRPL primi
 - Marketplace listings  
 - Wallet authentication  
 - Role-based dashboards  
-- Coordination of XRPL transactions  
+- Coordination of XRPL transactions
 
 **Private keys are never stored or transmitted.**
 
@@ -176,17 +179,18 @@ No passwords. No custody. No personal data.
 ## Tech Stack
 
 ### Frontend
-- React + TypeScript  
-- Tailwind CSS v4  
+- React Framework + TypeScript  
+- Tailwind CSS
 
 ### Backend
 - Supabase (PostgreSQL, RLS)  
 - Public-key authentication  
-- Auction indexing  
+- Javascript (XRPL library)
+- Node.js
 
 ### Blockchain
 - XRP Ledger (XRPL Testnet)  
-- NFTs, Issued Tokens, Trustlines, Escrow  
+- NFTs, Issued Tokens, Trustlines 
 
 ---
 
@@ -194,7 +198,9 @@ No passwords. No custody. No personal data.
 
 ### Prerequisites
 - Node.js 16+  
-- Supabase account  
+- Supabase account
+- OpenAI API key
+- XRPL Test Wallets 
 
 ### Installation
 ```bash
@@ -203,11 +209,24 @@ cd YOUR_REPO
 npm install
 ```
 
-### Environment Variables
-```env
+### Environment Variables (backend)
+```env 
 VITE_SUPABASE_URL=your_supabase_project_url
 VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
 XRPL_NETWORK=wss://s.altnet.rippletest.net:51233
+#+ Wallet Seeds for to create trust lines & transfer RLUSD in 
+ESTABLISHMENT_SEED=your_establishment_seed
+PLATFORM_WALLET_ADDRESS=your_platform_wallet_address
+PLATFORM_WALLET_SEED=your_platform_wallet_seed
+PORT=your_chosen_server_port
+OPENAI_API=your_openai_api_key
+```
+
+### Environment Variables (frontend)
+```env 
+VITE_SUPABASE_URL=your_supabase_url
+VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_supabase_role_key
 ```
 
 ---
@@ -261,9 +280,10 @@ npm run dev
 
 ### Investors
 - Authenticate with XRPL wallet  
-- Browse invoice auctions  
-- Place bids using issued tokens  
-- Receive Invoice NFTs  
+- Browse invoice auctions listings
+- Place bids using issued tokens (RLUSD)
+- Receive Invoice NFTs
+- Receive Payments when Invoice NFTs mature
 
 ### Establishments
 - Authenticate with XRPL wallet  
@@ -275,11 +295,9 @@ npm run dev
 
 ## Business Model
 - Invoice factoring  
-- Future receivables sold at discount  
-- Investors receive payment at maturity  
-
-Returns are **not guaranteed**.  
-Credit risk exists until escrow is funded.
+- Future receivables sold by Establishments at discount for immediate cash
+- Investors earn returns by buying invoices below face value
+- Investors receive payment at maturity form Establishment that minted the NFT
 
 ---
 
