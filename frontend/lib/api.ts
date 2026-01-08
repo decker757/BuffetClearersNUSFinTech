@@ -60,3 +60,51 @@ export function signOut(): void {
   localStorage.removeItem('authToken');
   localStorage.removeItem('walletAddress');
 }
+
+/**
+ * Mint an invoice NFT with image generation and metadata
+ */
+export async function mintInvoiceNFT(params: {
+  invoiceNumber: string;
+  faceValue: number;
+  maturityDate: string;
+  creditorPublicKey: string;
+  debtorPublicKey: string;
+}): Promise<{
+  success: boolean;
+  data?: {
+    nftokenId: string;
+    invoiceNumber: string;
+    faceValue: number;
+    maturityDate: string;
+    imageLink: string;
+    metadataUri: string;
+    issuer: string;
+    recipient: string;
+    mintTxHash: string;
+    offerIndex: string;
+    offerTxHash: string;
+  };
+  error?: string;
+  message?: string;
+}> {
+  console.log('🔵 Frontend: Calling /nft/mint with params:', params);
+  console.log('🔵 Auth token:', localStorage.getItem('authToken')?.slice(0, 20) + '...');
+
+  try {
+    const response = await authenticatedFetch('/nft/mint', {
+      method: 'POST',
+      body: JSON.stringify(params)
+    });
+
+    console.log('🔵 Response status:', response.status);
+
+    const data = await response.json();
+    console.log('🔵 Response data:', data);
+
+    return data;
+  } catch (error) {
+    console.error('❌ Frontend API Error:', error);
+    throw error;
+  }
+}
