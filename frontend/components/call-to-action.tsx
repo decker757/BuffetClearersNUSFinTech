@@ -1,6 +1,8 @@
 import { ArrowRight } from 'lucide-react';
 
-export function CallToAction() {
+type Page = 'home' | 'marketplace' | 'how-it-works' | 'about' | 'dashboard' | 'sign-in';
+
+export function CallToAction({ setCurrentPage }: { setCurrentPage: (page: Page) => void }) {
   return (
     <section className="py-20 px-4 sm:px-6 lg:px-8 bg-gradient-to-br from-blue-950 via-purple-950 to-indigo-950 text-white border-y border-gray-800 relative overflow-hidden">
       {/* Animated gradient orbs */}
@@ -17,11 +19,17 @@ export function CallToAction() {
         </p>
         
         <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
-          <button className="px-8 py-4 bg-white text-blue-600 rounded-lg hover:bg-gray-100 transition-colors flex items-center justify-center gap-2">
+          <button
+            onClick={() => setCurrentPage('sign-in')}
+            className="px-8 py-4 bg-white text-blue-600 rounded-lg hover:bg-gray-100 transition-colors flex items-center justify-center gap-2"
+          >
             Start Your First Auction
             <ArrowRight className="w-5 h-5" />
           </button>
-          <button className="px-8 py-4 border-2 border-white text-white rounded-lg hover:bg-white hover:text-blue-600 transition-colors">
+          <button
+            onClick={() => setCurrentPage('marketplace')}
+            className="px-8 py-4 border-2 border-white text-white rounded-lg hover:bg-white hover:text-blue-600 transition-colors"
+          >
             Browse Active Listings
           </button>
         </div>

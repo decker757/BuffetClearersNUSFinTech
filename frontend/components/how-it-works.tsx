@@ -1,6 +1,8 @@
 import { FileText, Coins, Lock, TrendingUp, ArrowRight, Shield, Users, Zap } from 'lucide-react';
 
-export function HowItWorks() {
+type Page = 'home' | 'marketplace' | 'how-it-works' | 'about' | 'dashboard' | 'sign-in';
+
+export function HowItWorks({ setCurrentPage }: { setCurrentPage: (page: Page) => void }) {
   return (
     <div className="min-h-screen bg-gray-950 pt-16">
       {/* Hero Section */}
@@ -236,10 +238,16 @@ export function HowItWorks() {
             Join our platform today and experience the future of invoice financing
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <button className="px-8 py-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl hover:from-blue-700 hover:to-purple-700 transition-all text-lg">
+            <button
+              onClick={() => setCurrentPage('sign-in')}
+              className="px-8 py-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl hover:from-blue-700 hover:to-purple-700 transition-all text-lg"
+            >
               List Your Invoice
             </button>
-            <button className="px-8 py-4 bg-gray-900 text-white rounded-xl border border-gray-800 hover:border-gray-700 transition-all text-lg">
+            <button
+              onClick={() => setCurrentPage('sign-in')}
+              className="px-8 py-4 bg-gray-900 text-white rounded-xl border border-gray-800 hover:border-gray-700 transition-all text-lg"
+            >
               Start Investing
             </button>
           </div>

@@ -21,7 +21,7 @@ export function Hero({ setCurrentPage }: { setCurrentPage: (page: Page) => void 
             <h1 className="text-5xl lg:text-6xl mb-6 text-white leading-tight">
               Turn Future Payments Into{' '}
               <GradientText
-                animationSpeed={3}
+                animationSpeed={2}
                 colors={['#60A5FA', '#A78BFA', '#C084FC', '#60A5FA']}
               >
                 Liquid Assets
@@ -33,11 +33,14 @@ export function Hero({ setCurrentPage }: { setCurrentPage: (page: Page) => void 
             </p>
 
             <div className="flex flex-col sm:flex-row gap-4 mb-12">
-              <button className="px-8 py-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:opacity-90 transition-opacity flex items-center justify-center gap-2">
+              <button
+                onClick={() => setCurrentPage('sign-in')}
+                className="px-8 py-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
+              >
                 Start Auction
                 <ArrowRight className="w-5 h-5" />
               </button>
-              <button 
+              <button
                 onClick={() => setCurrentPage('marketplace')}
                 className="px-8 py-4 border-2 border-gray-700 text-gray-300 rounded-lg hover:bg-gray-800 hover:border-gray-600 transition-colors"
               >
@@ -101,9 +104,9 @@ export function Hero({ setCurrentPage }: { setCurrentPage: (page: Page) => void 
                   </div>
                 </div>
 
-                <button className="w-full py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:opacity-90 transition-opacity">
+                <div className="w-full py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg text-center opacity-75 cursor-not-allowed">
                   Place Bid
-                </button>
+                </div>
               </div>
             </div>
 

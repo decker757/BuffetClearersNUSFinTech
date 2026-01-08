@@ -135,12 +135,12 @@ export default function App() {
               <Hero setCurrentPage={setCurrentPage} />
               <HowItWorksSection />
               <Features />
-              <CallToAction />
+              <CallToAction setCurrentPage={setCurrentPage} />
             </>
           ) : currentPage === 'how-it-works' ? (
-            <HowItWorks />
+            <HowItWorks setCurrentPage={setCurrentPage} />
           ) : currentPage === 'about' ? (
-            <About />
+            <About setCurrentPage={setCurrentPage} />
           ) : currentPage === 'demo-generator' ? (
             <DemoDataGenerator onBackToSignIn={navigateToSignIn} />
           ) : (
