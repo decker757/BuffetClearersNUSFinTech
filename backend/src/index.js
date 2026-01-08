@@ -3,6 +3,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import { connectXRPL } from "./config/xrplClient.js";
 import authRoutes from "./routes/auth.js";
+import auctionRoutes from "./routes/auctions.js";
 import { authenticateToken } from "./middleware/auth.js";
 
 dotenv.config();
@@ -20,6 +21,9 @@ app.get("/", (req, res) => {
 
 // Auth routes
 app.use("/auth", authRoutes);
+
+// Auction routes
+app.use("/", auctionRoutes);
 
 // Protected route example
 app.get("/protected", authenticateToken, (req, res) => {
