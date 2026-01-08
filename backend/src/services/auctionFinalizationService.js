@@ -35,8 +35,9 @@ export async function finalizeAuction(auctionId) {
       return { success: false, status: 'not_expired', message: 'Auction has not expired yet' };
     }
 
-    // Get sorted bids (highest first)
+    // Get sorted bids (highest first) - filter by active status
     const sortedBids = (auction.AUCTIONBIDS || [])
+      .filter(bid => bid.check_status === 'active')
       .sort((a, b) => b.bid_amount - a.bid_amount);
 
     if (sortedBids.length === 0) {

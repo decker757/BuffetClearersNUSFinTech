@@ -382,17 +382,12 @@ function AuctionDetailModal({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const amount = parseFloat(bidAmount);
-    
+
     if (!amount || amount < (auction.min_bid || 0)) {
       toast.error(`Minimum bid is ${auction.min_bid?.toLocaleString()} RLUSD`);
       return;
     }
-    
-    if (amount <= (auction.current_bid || 0)) {
-      toast.error(`Bid must be higher than current bid of ${auction.current_bid?.toLocaleString()} RLUSD`);
-      return;
-    }
-    
+
     onPlaceBid(auction, bidAmount);
   };
 
@@ -511,7 +506,7 @@ function AuctionDetailModal({
                   required
                 />
                 <p className="text-xs text-gray-500 mt-2">
-                  Must exceed current bid: {auction.current_bid?.toLocaleString() || '0'} RLUSD
+                  Current highest bid: {auction.current_bid?.toLocaleString() || '0'} RLUSD
                 </p>
               </div>
 

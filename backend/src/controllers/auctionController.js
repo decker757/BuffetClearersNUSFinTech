@@ -233,7 +233,8 @@ export const getUserBids = async (req, res) => {
         )
       `)
       .eq('bid_by', address)
-      .order('created_at', { ascending: false });
+      .eq('check_status', 'active')
+      .order('created_at', { ascending: false});
 
     if (error) {
       console.error('Error fetching user bids:', error);
@@ -327,15 +328,8 @@ export const placeBid = async (req, res) => {
     // Validate bid meets minimum requirements
     if (bid_amount < auction.min_bid) {
       return res.status(400).json({
-        error: `Bid must be at least ${auction.min_bid}`,
+        error: `Bid must be at least ${auction.min_bid} RLUSD`,
         min_bid: auction.min_bid
-      });
-    }
-
-    if (bid_amount <= auction.current_bid) {
-      return res.status(400).json({
-        error: `Bid must be greater than current bid of ${auction.current_bid}`,
-        current_bid: auction.current_bid
       });
     }
 
@@ -350,29 +344,83 @@ export const placeBid = async (req, res) => {
       });
     }
 
-    // Insert bid record with Check information
-    const { data: bidData, error: bidError } = await supabase
+    // Check if user already has a bid on this auction
+    const { data: existingBid } = await supabase
       .from('AUCTIONBIDS')
-      .insert({
-        aid: id,
-        bid_amount,
-        bid_by: address,
-        xrpl_check_id,
-        xrpl_check_tx_hash,
-        check_status: 'active'
-      })
-      .select()
+      .select('bid_id')
+      .eq('aid', id)
+      .eq('bid_by', address)
+      .eq('check_status', 'active')
       .single();
 
-    if (bidError) {
-      console.error('Error placing bid:', bidError);
-      return res.status(500).json({ error: bidError.message });
+    let bidData;
+
+    if (existingBid) {
+      // Update existing bid
+      console.log(`Updating existing bid ${existingBid.bid_id} for auction ${id}`);
+      const { data, error: bidError } = await supabase
+        .from('AUCTIONBIDS')
+        .update({
+          bid_amount,
+          xrpl_check_id,
+          xrpl_check_tx_hash,
+          created_at: new Date().toISOString() // Update timestamp to reflect new bid time
+        })
+        .eq('bid_id', existingBid.bid_id)
+        .select()
+        .single();
+
+      if (bidError) {
+        console.error('Error updating bid:', bidError);
+        return res.status(500).json({ error: bidError.message });
+      }
+      bidData = data;
+    } else {
+      // Create new bid
+      console.log(`Creating new bid for auction ${id}`);
+      const { data, error: bidError } = await supabase
+        .from('AUCTIONBIDS')
+        .insert({
+          aid: id,
+          bid_amount,
+          bid_by: address,
+          xrpl_check_id,
+          xrpl_check_tx_hash,
+          check_status: 'active'
+        })
+        .select()
+        .single();
+
+      if (bidError) {
+        console.error('Error placing bid:', bidError);
+        return res.status(500).json({ error: bidError.message });
+      }
+      bidData = data;
     }
+
+    // Recalculate current_bid by finding highest active bid
+    const { data: allBids, error: bidsError } = await supabase
+      .from('AUCTIONBIDS')
+      .select('bid_amount')
+      .eq('aid', id)
+      .eq('check_status', 'active')
+      .order('bid_amount', { ascending: false });
+
+    if (bidsError) {
+      console.error('Error fetching bids for recalculation:', bidsError);
+    }
+
+    // Get the highest bid amount from active bids
+    const newCurrentBid = (allBids && allBids.length > 0)
+      ? allBids[0].bid_amount
+      : auction.min_bid;
+
+    console.log(`Recalculated current_bid for auction ${id}: ${newCurrentBid} (from ${allBids?.length || 0} active bids)`);
 
     // Update current_bid in auction listing
     const { error: updateError } = await supabase
       .from('AUCTIONLISTING')
-      .update({ current_bid: bid_amount })
+      .update({ current_bid: newCurrentBid })
       .eq('aid', id);
 
     if (updateError) {

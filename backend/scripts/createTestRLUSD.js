@@ -38,7 +38,8 @@ async function main() {
   // Step 2: Create trustlines from Investor and Bakery to Hotel
   const wallets = [
     { seed: process.env.INVESTOR_SEED, name: 'Investor', amount: 200000 },
-    { seed: process.env.BAKERY_SEED, name: 'Bakery', amount: 200000 }
+    { seed: process.env.BAKERY_SEED, name: 'Bakery', amount: 200000 },
+    { seed: process.env.MICHAEL_BURRY_SEED, name: 'Michael Burry', amount: 2000000 }
   ];
 
   console.log('\n📋 Setting Up Trustlines & Issuing RLUSD\n');

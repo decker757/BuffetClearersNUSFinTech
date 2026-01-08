@@ -54,6 +54,8 @@ export function CustomerDashboard({
         getBidsByUser(publicKey),
         getNFTokensByOwner(publicKey)
       ]);
+
+      // Backend now returns only active bids (superseded bids are filtered out)
       setActiveBids(bids);
       setOwnedTokens(tokens);
     } catch (error) {
@@ -295,15 +297,15 @@ export function CustomerDashboard({
                         <div className="flex items-start justify-between mb-4">
                           <div>
                             <div className="text-white font-medium mb-1">
-                              {nftoken?.invoice_number || 'Invoice NFT'}
+                              {nftoken?.invoice_number || 'Invoice NFT'} <span className="text-gray-500 text-sm font-normal">(Auction #{listing?.aid})</span>
                             </div>
                             <div className="text-sm text-gray-400">
                               Face Value: {nftoken?.face_value?.toLocaleString()} RLUSD
                             </div>
                           </div>
                           <span className={`px-3 py-1 rounded-full text-xs ${
-                            isWinning 
-                              ? 'bg-green-950/50 text-green-400 border border-green-900/50' 
+                            isWinning
+                              ? 'bg-green-950/50 text-green-400 border border-green-900/50'
                               : 'bg-yellow-950/50 text-yellow-400 border border-yellow-900/50'
                           }`}>
                             {isWinning ? 'Winning' : 'Outbid'}

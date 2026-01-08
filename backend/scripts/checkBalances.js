@@ -75,7 +75,8 @@ async function checkAllBalances() {
   const wallets = [
     { seed: process.env.INVESTOR_SEED, name: 'Investor Wallet' },
     { seed: process.env.BAKERY_SEED, name: 'Bakery Wallet' },
-    { seed: process.env.HOTEL_SEED, name: 'Hotel Wallet (Platform)' }
+    { seed: process.env.HOTEL_SEED, name: 'Hotel Wallet (Platform)' },
+    { seed: process.env.MICHAEL_BURRY_SEED, name: 'Michael Burry' },
   ];
 
   for (const { seed, name } of wallets) {
