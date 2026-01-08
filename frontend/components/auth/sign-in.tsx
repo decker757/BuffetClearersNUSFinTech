@@ -7,7 +7,7 @@ import { toast } from 'sonner';
 const BACKEND_URL = 'http://localhost:6767';
 
 interface SignInProps {
-  onSignIn: (publicKey: string) => void;
+  onSignIn: (address: string) => void;
   onNavigateToDemoGenerator?: () => void;
 }
 
@@ -82,8 +82,8 @@ export function SignIn({ onSignIn, onNavigateToDemoGenerator }: SignInProps) {
 
       toast.success('Authentication successful!');
 
-      // Call onSignIn with the wallet's public key (for compatibility with existing flow)
-      onSignIn(wallet.publicKey);
+      // Call onSignIn with the wallet's address (r...)
+      onSignIn(wallet.address);
 
     } catch (error) {
       console.error('Sign in error:', error);

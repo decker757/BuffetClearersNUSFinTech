@@ -45,6 +45,13 @@ export async function mintInvoiceNFT(req, res) {
     console.log(`Debtor: ${debtorPublicKey.slice(0, 10)}...`);
     console.log(`Creditor: ${creditorPublicKey.slice(0, 10)}...`);
 
+    // Convert public keys to wallet addresses (if not already addresses)
+    // Addresses start with 'r', public keys start with 'ED'
+    const debtorAddress = debtorPublicKey.startsWith('r') ? debtorPublicKey : deriveAddress(debtorPublicKey);
+    const creditorAddress = creditorPublicKey.startsWith('r') ? creditorPublicKey : deriveAddress(creditorPublicKey);
+    console.log(`Debtor Address: ${debtorAddress}`);
+    console.log(`Creditor Address: ${creditorAddress}`);
+
     // Step 1 & 2: Generate temporary NFT ID and save initial invoice data to DB
     console.log('\n[Step 1-2] Creating invoice record in database...');
     const tempNftId = `NFT-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -53,12 +60,12 @@ export async function mintInvoiceNFT(req, res) {
       .from('NFTOKEN')
       .insert([{
         nftoken_id: tempNftId, // Temporary, will update with real NFTokenID later
-        created_by: debtorPublicKey,
+        created_by: debtorAddress, // ✅ Store ADDRESS not public key
         invoice_number: invoiceNumber,
         face_value: faceValue,
         image_link: null, // Will update after image upload
         maturity_date: maturityDate,
-        current_owner: creditorPublicKey, // Creditor will receive the NFT
+        current_owner: creditorAddress, // ✅ Store ADDRESS not public key
         current_state: 'minting' // Temporary state during minting process
       }])
       .select()
@@ -100,8 +107,8 @@ export async function mintInvoiceNFT(req, res) {
         faceValue,
         maturityDate,
         imageUrl: imageLink,
-        originalOwner: debtorPublicKey,
-        creditorPublicKey
+        originalOwner: debtorAddress, // ✅ Use address not public key
+        creditorPublicKey: creditorAddress // ✅ Use address not public key
       });
 
       validateMetadata(metadata);
@@ -115,9 +122,6 @@ export async function mintInvoiceNFT(req, res) {
 
       // Step 7: Mint NFT on XRPL and create transfer offer
       console.log('\n[Step 7] Minting NFT on XRPL...');
-
-      // Convert creditor's public key to XRPL address
-      const creditorAddress = deriveAddress(creditorPublicKey);
       console.log('  Creditor Address:', creditorAddress);
       console.log('  Platform Address:', platformWallet.address);
 
@@ -237,12 +241,12 @@ export async function getNFTDetails(req, res) {
 export async function verifyNFTOwnership(req, res) {
   try {
     const { nftokenId, txHash } = req.body;
-    const userPublicKey = req.user.publicKey;
+    const userAddress = req.user.address;
 
     console.log('\n🔍 Verifying NFT ownership...');
     console.log('  NFToken ID:', nftokenId);
     console.log('  TX Hash:', txHash);
-    console.log('  User Public Key:', userPublicKey);
+    console.log('  User Address:', userAddress);
 
     // Validate inputs
     if (!nftokenId || !txHash) {
@@ -269,16 +273,16 @@ export async function verifyNFTOwnership(req, res) {
     // Verify that the user is the current owner
     console.log('  🔍 Ownership check:');
     console.log('    NFT current_owner:', nft.current_owner);
-    console.log('    User publicKey:   ', userPublicKey);
-    console.log('    Match:', nft.current_owner === userPublicKey);
+    console.log('    User address:     ', userAddress);
+    console.log('    Match:', nft.current_owner === userAddress);
 
-    if (nft.current_owner !== userPublicKey) {
+    if (nft.current_owner !== userAddress) {
       return res.status(403).json({
         success: false,
         error: 'You are not the owner of this NFT',
         debug: {
           nftOwner: nft.current_owner,
-          yourPublicKey: userPublicKey
+          yourAddress: userAddress
         }
       });
     }
@@ -294,7 +298,6 @@ export async function verifyNFTOwnership(req, res) {
     // Verify ownership on-chain
     console.log('  Verifying on-chain ownership...');
     const client = await connectXRPL();
-    const userAddress = deriveAddress(userPublicKey);
 
     const response = await client.request({
       command: 'account_nfts',
