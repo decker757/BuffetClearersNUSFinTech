@@ -1,11 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Filter, ChevronDown, TrendingUp, Clock, X, Calendar, FileText, Shield, DollarSign, Timer, AlertCircle } from 'lucide-react';
 import { UserRole } from './auth/onboarding';
-<<<<<<< Updated upstream
-import { getActiveAuctionListings, placeBid, getBidCountsByAuctions,getBidsByUser } from '../lib/database';
-=======
 import { getActiveAuctionListings, placeBid, getBidCountsByAuctions } from '../lib/database';
->>>>>>> Stashed changes
 import { AuctionListingWithNFT } from '../lib/supabase';
 import { toast } from 'sonner';
 
