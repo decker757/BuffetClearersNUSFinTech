@@ -11,23 +11,33 @@ import { supabase } from '../config/supabase.js';
 
 /**
  * Process auction finalization when it expires
+ * NEW FLOW: Just mark the winner, they pay later via "Pay & Claim NFT" button
  * Returns: { success, status, message, details }
  */
 export async function finalizeAuction(auctionId) {
   try {
+    console.log(`\n🏁 Finalizing auction ${auctionId}...`);
+
     // Get auction with bids
+    // Note: Using AUCTIONBIDS!AUCTIONBIDS_aid_fkey to specify which FK relationship to use
+    // (since there are two FKs between AUCTIONLISTING and AUCTIONBIDS)
     const { data: auction, error: auctionError } = await supabase
       .from('AUCTIONLISTING')
       .select(`
         *,
         NFTOKEN(*),
-        AUCTIONBIDS(*)
+        AUCTIONBIDS!AUCTIONBIDS_aid_fkey(*)
       `)
       .eq('aid', auctionId)
       .single();
 
     if (auctionError || !auction) {
-      throw new Error('Auction not found');
+      console.error('Failed to fetch auction:', {
+        auctionId,
+        error: auctionError,
+        hasData: !!auction
+      });
+      throw new Error(`Auction not found: ${auctionError?.message || 'No data returned'}`);
     }
 
     // Check if auction has expired
@@ -41,49 +51,87 @@ export async function finalizeAuction(auctionId) {
       .sort((a, b) => b.bid_amount - a.bid_amount);
 
     if (sortedBids.length === 0) {
-      // No bids - return NFT to owner
-      await returnNFTToOwner(auction);
+      console.log('  No bids received - marking as unlisted');
+      // No bids - mark as unlisted (NFT stays in platform wallet until owner unlists it manually)
+      await supabase
+        .from('AUCTIONLISTING')
+        .update({ status: 'unlisted' })
+        .eq('aid', auctionId);
+
       return {
         success: true,
         status: 'unlisted',
-        message: 'No bids received, NFT returned to owner'
+        message: 'No bids received, auction unlisted'
       };
     }
 
-    // Try to process payment with each bidder until one succeeds
+    // Try each bidder from highest to lowest until we find one with sufficient balance
     for (let i = 0; i < sortedBids.length; i++) {
       const bid = sortedBids[i];
-      const bidderAddress = bid.bid_by || bid.bidder_address; // Support both field names
-      const result = await attemptPaymentAndTransfer(auction, bid);
+      console.log(`  Checking bidder ${i + 1}/${sortedBids.length}: ${bid.bid_by} (${bid.bid_amount} RLUSD)`);
 
-      if (result.success) {
-        // Payment successful!
-        await markAuctionCompleted(auctionId, bidderAddress, bid.bid_amount);
+      // Check if bidder has enough RLUSD
+      const hasSufficientBalance = await hasEnoughRLUSD(bid.bid_by, bid.bid_amount);
+
+      if (hasSufficientBalance) {
+        // Found a winner with sufficient balance!
+        console.log(`  ✅ Winner found: ${bid.bid_by} with sufficient balance`);
+
+        // Update winning bid status to 'won_unpaid'
+        const { error: bidUpdateError } = await supabase
+          .from('AUCTIONBIDS')
+          .update({ check_status: 'won_unpaid' })
+          .eq('bid_id', bid.bid_id);
+
+        if (bidUpdateError) {
+          console.error('  ❌ Failed to update bid status:', bidUpdateError);
+          throw new Error(`Failed to update bid status: ${bidUpdateError.message}`);
+        }
+
+        console.log(`  ✅ Bid ${bid.bid_id} marked as won_unpaid`);
+
+        // Mark auction as completed (winner still needs to pay)
+        const { error: auctionUpdateError } = await supabase
+          .from('AUCTIONLISTING')
+          .update({
+            status: 'completed',
+            winning_bid_id: bid.bid_id
+          })
+          .eq('aid', auctionId);
+
+        if (auctionUpdateError) {
+          console.error('  ❌ Failed to update auction status:', auctionUpdateError);
+          throw new Error(`Failed to update auction status: ${auctionUpdateError.message}`);
+        }
+
+        console.log('  ✅ Auction marked as completed - winner must now pay to claim NFT');
+
         return {
           success: true,
           status: 'completed',
-          message: 'Auction completed successfully',
+          message: 'Auction ended - winner can now pay and claim NFT',
           details: {
-            winner: bidderAddress,
-            amount: bid.bid_amount,
-            txHash: result.paymentHash
+            winner: bid.bid_by,
+            amount: bid.bid_amount
           }
         };
-      }
-
-      // Payment failed, log and try next bidder
-      console.log(`Payment failed for bidder ${bidderAddress}, trying next...`);
-
-      // If this was the last bidder, return NFT to owner
-      if (i === sortedBids.length - 1) {
-        await returnNFTToOwner(auction);
-        return {
-          success: false,
-          status: 'unlisted',
-          message: 'All bidders failed payment, NFT returned to owner'
-        };
+      } else {
+        console.log(`  ❌ Bidder ${bid.bid_by} has insufficient balance, trying next...`);
       }
     }
+
+    // No bidders had sufficient balance
+    console.log('  ❌ No bidders have sufficient balance - marking as unlisted');
+    await supabase
+      .from('AUCTIONLISTING')
+      .update({ status: 'unlisted' })
+      .eq('aid', auctionId);
+
+    return {
+      success: false,
+      status: 'unlisted',
+      message: 'No bidders had sufficient balance, auction unlisted'
+    };
 
   } catch (error) {
     console.error('Error finalizing auction:', error);
@@ -269,8 +317,20 @@ export async function processExpiredAuctions() {
 
     for (const auction of expiredAuctions) {
       console.log(`Processing auction ${auction.aid}...`);
-      const result = await finalizeAuction(auction.aid);
-      console.log(`Auction ${auction.aid} result:`, result);
+      try {
+        const result = await finalizeAuction(auction.aid);
+        console.log(`Auction ${auction.aid} result:`, result);
+      } catch (error) {
+        console.error(`Error finalizing auction ${auction.aid}:`, error.message);
+        // If auction not found, mark it as unlisted to prevent repeated processing
+        if (error.message === 'Auction not found') {
+          console.log(`  Marking auction ${auction.aid} as unlisted to prevent reprocessing`);
+          await supabase
+            .from('AUCTIONLISTING')
+            .update({ status: 'unlisted' })
+            .eq('aid', auction.aid);
+        }
+      }
     }
 
   } catch (error) {

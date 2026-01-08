@@ -559,3 +559,69 @@ export async function getEscrowDetails(ownerAddress, escrowSequence) {
     return null; // Return null instead of throwing to simplify validation logic
   }
 }
+
+/**
+ * Accept an NFT sell offer
+ * Used to accept NFT transfers back to platform/hotel during maturity redemption
+ */
+export async function acceptNFTOffer(buyerSeed, offerIndex) {
+  try {
+    const client = await connectXRPL();
+    const xrpl = await import('xrpl');
+
+    const buyer = xrpl.Wallet.fromSeed(buyerSeed);
+
+    console.log('🤝 Accepting NFT offer:');
+    console.log('  Buyer:', buyer.address);
+    console.log('  Offer Index:', offerIndex);
+
+    // Accept the NFT offer
+    const acceptTx = {
+      TransactionType: 'NFTokenAcceptOffer',
+      Account: buyer.address,
+      NFTokenSellOffer: offerIndex
+    };
+
+    const result = await client.submitAndWait(acceptTx, { wallet: buyer });
+
+    if (result.result.meta.TransactionResult !== 'tesSUCCESS') {
+      throw new Error(`Failed to accept NFT offer: ${result.result.meta.TransactionResult}`);
+    }
+
+    console.log('✅ NFT offer accepted:', result.result.hash);
+
+    return {
+      success: true,
+      hash: result.result.hash
+    };
+
+  } catch (error) {
+    console.error('Error accepting NFT offer:', error);
+    throw error;
+  }
+}
+
+/**
+ * Find NFT sell offers for a specific NFT
+ * Returns offers where the NFT is being sold
+ */
+export async function findNFTSellOffersForToken(nftokenId) {
+  try {
+    const client = await connectXRPL();
+
+    const offers = await client.request({
+      command: 'nft_sell_offers',
+      nft_id: nftokenId
+    });
+
+    return offers.result.offers || [];
+
+  } catch (error) {
+    if (error.data && error.data.error === 'objectNotFound') {
+      // No offers found
+      return [];
+    }
+    console.error('Error finding NFT sell offers:', error);
+    return [];
+  }
+}

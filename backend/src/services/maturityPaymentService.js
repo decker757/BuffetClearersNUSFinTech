@@ -359,6 +359,7 @@ export async function getPaymentsAwaitingCollection(creditorAddress) {
 
 /**
  * Get payment history for a user (both as debtor and creditor)
+ * Only returns completed or cashed payments
  */
 export async function getPaymentHistory(userAddress) {
   try {
@@ -369,7 +370,8 @@ export async function getPaymentHistory(userAddress) {
         NFTOKEN(*)
       `)
       .or(`debtor_address.eq.${userAddress},creditor_address.eq.${userAddress}`)
-      .order('created_at', { ascending: false });
+      .in('check_status', ['completed', 'cashed'])
+      .order('paid_at', { ascending: false, nullsFirst: false });
 
     if (error) {
       throw new Error(`Failed to fetch payment history: ${error.message}`);
@@ -389,5 +391,102 @@ export async function getPaymentHistory(userAddress) {
   } catch (error) {
     console.error('Error fetching payment history:', error);
     return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Pay maturity amount directly via RLUSD transfer
+ * Hotel sends RLUSD to current NFT holder
+ * @param {number} paymentId - Payment record ID
+ * @param {string} debtorAddress - Hotel wallet address (from auth token)
+ * @param {string} paymentTxHash - XRPL transaction hash of the RLUSD payment
+ */
+export async function payMaturityDirectly(paymentId, debtorAddress, paymentTxHash) {
+  try {
+    console.log(`💰 Processing direct maturity payment for payment #${paymentId}`);
+
+    // Get payment record with NFT details
+    const { data: payment, error: paymentError } = await supabase
+      .from('MATURITY_PAYMENT')
+      .select(`
+        *,
+        NFTOKEN(*)
+      `)
+      .eq('payment_id', paymentId)
+      .single();
+
+    if (paymentError || !payment) {
+      throw new Error('Payment record not found');
+    }
+
+    // Verify the authenticated user is the debtor for this payment
+    if (payment.debtor_address !== debtorAddress) {
+      throw new Error('You are not the debtor for this payment');
+    }
+
+    // Check payment status
+    if (payment.check_status === 'completed' || payment.check_status === 'cashed') {
+      throw new Error('Payment has already been completed');
+    }
+
+    if (payment.check_status !== 'pending') {
+      throw new Error(`Payment cannot be processed (current status: ${payment.check_status})`);
+    }
+
+    console.log(`  Amount: ${payment.payment_amount} RLUSD`);
+    console.log(`  From: ${payment.debtor_address} (Hotel)`);
+    console.log(`  To: ${payment.creditor_address} (NFT Holder)`);
+    console.log(`  Payment TX: ${paymentTxHash}`);
+
+    // TODO: Verify payment transaction on XRPL
+    // For now, we trust the payment_tx_hash provided
+
+    // Update payment record to completed
+    const { error: updateError } = await supabase
+      .from('MATURITY_PAYMENT')
+      .update({
+        check_status: 'completed',
+        xrpl_check_tx_hash: paymentTxHash,
+        paid_at: new Date().toISOString()
+      })
+      .eq('payment_id', paymentId);
+
+    if (updateError) {
+      throw new Error(`Failed to update payment: ${updateError.message}`);
+    }
+
+    // Mark NFT as redeemed
+    const { error: nftError } = await supabase
+      .from('NFTOKEN')
+      .update({
+        current_state: 'redeemed',
+        redeemed_at: new Date().toISOString()
+      })
+      .eq('nftoken_id', payment.nftoken_id);
+
+    if (nftError) {
+      console.error('Warning: Failed to update NFT state:', nftError);
+    }
+
+    console.log(`✅ Maturity payment completed successfully`);
+
+    // Return updated payment
+    const { data: updatedPayment } = await supabase
+      .from('MATURITY_PAYMENT')
+      .select('*')
+      .eq('payment_id', paymentId)
+      .single();
+
+    return {
+      success: true,
+      payment: updatedPayment
+    };
+
+  } catch (error) {
+    console.error('Error processing direct maturity payment:', error);
+    return {
+      success: false,
+      error: error.message || 'Failed to process payment'
+    };
   }
 }

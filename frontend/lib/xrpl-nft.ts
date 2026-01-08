@@ -1,6 +1,9 @@
 import * as xrpl from 'xrpl';
 
 const XRPL_NETWORK = 'wss://s.altnet.rippletest.net:51233';
+const PLATFORM_WALLET_ADDRESS = 'rJoESWx9ZKHpEyNrLWBTA95XLxwoKJj59u';
+const RLUSD_ISSUER = 'r9EMUwedCZFW53NVfw9SNHvKoRWJ8fbgu7';
+const RLUSD_CURRENCY = '524C555344000000000000000000000000000000'; // "RLUSD" in hex
 
 /**
  * Find sell offers for a specific NFT
@@ -210,6 +213,170 @@ export async function createSellOfferToPlatform(params: {
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error occurred',
+    };
+  } finally {
+    await client.disconnect();
+  }
+}
+
+/**
+ * Transfer RLUSD from user wallet to platform wallet
+ * User must provide their wallet seed to sign the transaction
+ */
+export async function transferRLUSDToPlatform(params: {
+  walletSeed: string;
+  amount: number;
+}): Promise<{
+  success: boolean;
+  txHash?: string;
+  error?: string;
+}> {
+  const client = new xrpl.Client(XRPL_NETWORK);
+
+  try {
+    await client.connect();
+    console.log('🔗 Connected to XRPL');
+
+    // Create wallet from seed
+    const wallet = xrpl.Wallet.fromSeed(params.walletSeed);
+    console.log('👛 Wallet address:', wallet.address);
+    console.log('💰 Sending', params.amount, 'RLUSD to platform wallet:', PLATFORM_WALLET_ADDRESS);
+
+    // Create RLUSD payment transaction
+    const paymentTx: xrpl.Payment = {
+      TransactionType: 'Payment',
+      Account: wallet.address,
+      Destination: PLATFORM_WALLET_ADDRESS,
+      Amount: {
+        currency: RLUSD_CURRENCY,
+        value: params.amount.toString(),
+        issuer: RLUSD_ISSUER,
+      },
+    };
+
+    console.log('📝 Submitting RLUSD payment transaction...');
+
+    // Submit and wait for validation
+    const result = await client.submitAndWait(paymentTx, { wallet });
+
+    console.log('✅ Transaction validated:', result.result.hash);
+
+    // Check if transaction was successful
+    if (result.result.meta && typeof result.result.meta === 'object') {
+      const meta = result.result.meta as any;
+      if (meta.TransactionResult === 'tesSUCCESS') {
+        return {
+          success: true,
+          txHash: result.result.hash,
+        };
+      } else {
+        return {
+          success: false,
+          error: `Transaction failed: ${meta.TransactionResult}`,
+        };
+      }
+    }
+
+    return {
+      success: false,
+      error: 'Transaction failed to execute successfully',
+    };
+
+  } catch (error) {
+    console.error('❌ Error transferring RLUSD:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error occurred',
+    };
+  } finally {
+    await client.disconnect();
+  }
+}
+
+/**
+ * Create NFT sell offer to platform for maturity redemption
+ * Investor creates this offer so platform can facilitate NFT return to hotel
+ * @param walletSeed - Investor's wallet seed
+ * @param nftokenId - NFT ID to sell
+ * @param destination - Platform wallet address (optional, defaults to platform)
+ * @returns Promise with success status and offer index
+ */
+export async function createNFTRedemptionOffer(params: {
+  walletSeed: string;
+  nftokenId: string;
+  destination?: string;
+}): Promise<{
+  success: boolean;
+  offerIndex?: string;
+  txHash?: string;
+  error?: string;
+}> {
+  const client = new xrpl.Client(XRPL_NETWORK);
+
+  try {
+    await client.connect();
+    console.log('🔗 Connected to XRPL');
+
+    const wallet = xrpl.Wallet.fromSeed(params.walletSeed);
+    const destination = params.destination || PLATFORM_WALLET_ADDRESS;
+
+    console.log('📝 Creating NFT sell offer for redemption:');
+    console.log('  Seller:', wallet.address);
+    console.log('  NFT ID:', params.nftokenId);
+    console.log('  Destination:', destination);
+    console.log('  Amount: 0 XRP (free transfer for redemption)');
+
+    // Create NFT sell offer
+    const offerTx: xrpl.NFTokenCreateOffer = {
+      TransactionType: 'NFTokenCreateOffer',
+      Account: wallet.address,
+      NFTokenID: params.nftokenId,
+      Amount: '0', // 0 XRP for maturity redemption
+      Destination: destination, // Sell specifically to platform
+      Flags: xrpl.NFTokenCreateOfferFlags.tfSellNFToken
+    };
+
+    console.log('  📤 Submitting NFT sell offer...');
+
+    const result = await client.submitAndWait(offerTx, { wallet });
+
+    if (result.result.meta && typeof result.result.meta === 'object') {
+      const meta = result.result.meta as any;
+      if (meta.TransactionResult === 'tesSUCCESS') {
+        // Extract offer index from created node
+        const createdNode = meta.CreatedNode || meta.AffectedNodes?.find(
+          (node: any) => node.CreatedNode?.LedgerEntryType === 'NFTokenOffer'
+        )?.CreatedNode;
+
+        const offerIndex = createdNode?.LedgerIndex;
+
+        console.log('✅ NFT sell offer created!');
+        console.log('  Offer Index:', offerIndex);
+        console.log('  TX Hash:', result.result.hash);
+
+        return {
+          success: true,
+          offerIndex,
+          txHash: result.result.hash
+        };
+      } else {
+        return {
+          success: false,
+          error: `Transaction failed: ${meta.TransactionResult}`
+        };
+      }
+    }
+
+    return {
+      success: false,
+      error: 'Transaction failed to execute'
+    };
+
+  } catch (error) {
+    console.error('❌ Error creating NFT redemption offer:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error occurred'
     };
   } finally {
     await client.disconnect();

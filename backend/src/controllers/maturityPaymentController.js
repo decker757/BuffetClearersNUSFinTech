@@ -5,7 +5,8 @@ import {
   recordCheckCreation,
   verifyCheckCashed,
   processMaturedNFTs,
-  markOverduePayments
+  markOverduePayments,
+  payMaturityDirectly
 } from '../services/maturityPaymentService.js';
 
 /**
@@ -206,5 +207,47 @@ export const triggerOverdueMarking = async (req, res) => {
   } catch (error) {
     console.error('Error in triggerOverdueMarking:', error);
     res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+/**
+ * Pay maturity amount directly via RLUSD transfer
+ * Called by NFT issuer (hotel) to pay the current NFT holder
+ */
+export const payMaturityPayment = async (req, res) => {
+  try {
+    const { address } = req.user; // From JWT token (hotel wallet)
+    const { id } = req.params; // payment ID from URL
+    const { payment_tx_hash } = req.body;
+
+    console.log('\n💰 Processing maturity payment');
+    console.log('  Payment ID:', id);
+    console.log('  Debtor (Hotel):', address);
+    console.log('  Payment TX:', payment_tx_hash);
+
+    // Validate required fields
+    if (!payment_tx_hash) {
+      return res.status(400).json({
+        error: 'Missing required field: payment_tx_hash'
+      });
+    }
+
+    const result = await payMaturityDirectly(id, address, payment_tx_hash);
+
+    if (!result.success) {
+      return res.status(400).json({ error: result.error });
+    }
+
+    res.json({
+      success: true,
+      payment: result.payment,
+      message: 'Maturity payment sent successfully! NFT marked as redeemed.',
+      amount_paid: result.payment.payment_amount,
+      paid_to: result.payment.creditor_address
+    });
+
+  } catch (error) {
+    console.error('Error in payMaturityPayment:', error);
+    res.status(500).json({ error: 'Internal server error', message: error.message });
   }
 };

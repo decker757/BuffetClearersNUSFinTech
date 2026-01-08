@@ -9,7 +9,7 @@ import { NFToken, AuctionListingWithNFT } from '../../lib/supabase';
 import { mintInvoiceNFT, authenticatedFetch } from '../../lib/api';
 import { findNFTSellOffers, acceptNFTOffer, createSellOfferToPlatform, getNFTOwner } from '../../lib/xrpl-nft';
 import { toast } from 'sonner';
-import { fetchPendingPayments, createMaturityPaymentCheck, MaturityPayment } from '../../utils/maturityPayment';
+import { fetchPendingPayments, fetchPaymentHistory, payMaturityDirectly, MaturityPayment } from '../../utils/maturityPayment';
 
 // Platform wallet address from backend
 const PLATFORM_ADDRESS = 'rJoESWx9ZKHpEyNrLWBTA95XLxwoKJj59u';
@@ -40,9 +40,11 @@ export function EstablishmentDashboard({
   const [ownedTokens, setOwnedTokens] = useState<NFToken[]>([]);
   const [auctionListings, setAuctionListings] = useState<AuctionListingWithNFT[]>([]);
   const [pendingPayments, setPendingPayments] = useState<MaturityPayment[]>([]);
+  const [paymentHistory, setPaymentHistory] = useState<MaturityPayment[]>([]);
+  const [paymentsTab, setPaymentsTab] = useState<'pending' | 'history'>('pending');
   const [loading, setLoading] = useState(true);
   const [bidCounts, setBidCounts] = useState<Record<string, number>>({});
-  const [creatingCheckFor, setCreatingCheckFor] = useState<number | null>(null);
+  const [payingMaturityFor, setPayingMaturityFor] = useState<number | null>(null);
   
   // Update current time every minute for countdown
   useEffect(() => {
@@ -65,7 +67,8 @@ export function EstablishmentDashboard({
         loadIssuedTokens(),
         loadOwnedTokens(),
         loadAuctionListings(),
-        loadPendingPayments()
+        loadPendingPayments(),
+        loadPaymentHistory()
       ]);
     } catch (error) {
       console.error('Failed to load dashboard data:', error);
@@ -116,6 +119,16 @@ export function EstablishmentDashboard({
       setPendingPayments(payments);
     } catch (error) {
       console.error('Failed to load pending payments:', error);
+    }
+  };
+
+  const loadPaymentHistory = async () => {
+    try {
+      const history = await fetchPaymentHistory();
+      // Only show payments where this user is the debtor (hotel paying)
+      setPaymentHistory(history.asDebtor);
+    } catch (error) {
+      console.error('Failed to load payment history:', error);
     }
   };
 
@@ -357,29 +370,39 @@ export function EstablishmentDashboard({
     toast.info('Cancel auction feature coming soon');
   };
 
-  const handleCreatePaymentCheck = async (payment: MaturityPayment) => {
+  const handlePayMaturity = async (payment: MaturityPayment) => {
     try {
-      setCreatingCheckFor(payment.payment_id);
-      toast.loading('Creating payment Check on XRPL...', { id: 'create-check' });
+      setPayingMaturityFor(payment.payment_id);
+      toast.loading('Processing maturity payment...', { id: 'pay-maturity' });
 
-      const result = await createMaturityPaymentCheck(
+      // Prompt for wallet seed
+      const walletSeed = prompt('Enter your wallet seed to sign the RLUSD payment transaction:');
+      if (!walletSeed) {
+        toast.dismiss('pay-maturity');
+        setPayingMaturityFor(null);
+        return;
+      }
+
+      // Send RLUSD payment directly to NFT holder
+      const result = await payMaturityDirectly(
         payment.payment_id,
         payment.creditor_address,
-        payment.payment_amount
+        payment.payment_amount,
+        walletSeed
       );
 
       if (result.success) {
-        toast.success(result.message, { id: 'create-check' });
-        // Reload pending payments
-        await loadPendingPayments();
+        toast.success(result.message, { id: 'pay-maturity' });
+        // Reload both pending payments and history
+        await Promise.all([loadPendingPayments(), loadPaymentHistory()]);
       } else {
-        toast.error(result.message, { id: 'create-check' });
+        toast.error(result.error || 'Failed to send payment', { id: 'pay-maturity' });
       }
     } catch (error) {
-      console.error('Error creating payment Check:', error);
-      toast.error('Failed to create payment Check', { id: 'create-check' });
+      console.error('Error paying maturity:', error);
+      toast.error('Failed to send maturity payment', { id: 'pay-maturity' });
     } finally {
-      setCreatingCheckFor(null);
+      setPayingMaturityFor(null);
     }
   };
 
@@ -745,18 +768,44 @@ export function EstablishmentDashboard({
         </div>
 
         {/* Payments Due Section */}
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
-          <div className="mb-6">
+        <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+          <div className="p-6 pb-0">
             <h2 className="text-2xl text-white mb-2 flex items-center gap-2">
               <DollarSign className="w-6 h-6 text-red-400" />
-              Payments Due
+              Maturity Payments
             </h2>
-            <p className="text-sm text-gray-400">
-              Maturity payments you need to make - NFTs that have reached maturity date
+            <p className="text-sm text-gray-400 mb-6">
+              Manage payments for NFTs that have reached maturity date
             </p>
           </div>
 
-          {pendingPayments.length > 0 ? (
+          {/* Tabs */}
+          <div className="border-b border-gray-800 flex px-6">
+            <button
+              onClick={() => setPaymentsTab('pending')}
+              className={`px-6 py-3 text-sm transition-colors ${
+                paymentsTab === 'pending'
+                  ? 'border-b-2 border-red-500 text-white'
+                  : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              Pending ({pendingPayments.length})
+            </button>
+            <button
+              onClick={() => setPaymentsTab('history')}
+              className={`px-6 py-3 text-sm transition-colors ${
+                paymentsTab === 'history'
+                  ? 'border-b-2 border-green-500 text-white'
+                  : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              History ({paymentHistory.length})
+            </button>
+          </div>
+
+          <div className="p-6">
+            {/* Pending Payments Tab */}
+            {paymentsTab === 'pending' && (pendingPayments.length > 0 ? (
             <div className="space-y-4">
               {pendingPayments.map((payment) => {
                 const isOverdue = payment.check_status === 'overdue';
@@ -819,36 +868,115 @@ export function EstablishmentDashboard({
                       <div className="mb-4 p-3 bg-red-950/30 border border-red-900/50 rounded-lg flex items-start gap-2">
                         <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
                         <div className="text-sm text-red-400">
-                          <strong>Overdue Payment:</strong> This payment is {daysOverdue} days past due. Please create the payment Check as soon as possible.
+                          <strong>Overdue Payment:</strong> This payment is {daysOverdue} days past due. Please send the payment as soon as possible.
                         </div>
                       </div>
                     )}
 
                     <div className="pt-4 border-t border-gray-700">
                       <button
-                        onClick={() => handleCreatePaymentCheck(payment)}
-                        disabled={creatingCheckFor === payment.payment_id}
-                        className="px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+                        onClick={() => handlePayMaturity(payment)}
+                        disabled={payingMaturityFor === payment.payment_id}
+                        className="w-full px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                       >
-                        {creatingCheckFor === payment.payment_id
-                          ? 'Creating Check...'
-                          : `Create Payment Check (${payment.payment_amount.toLocaleString()} RLUSD)`}
+                        {payingMaturityFor === payment.payment_id ? (
+                          <>Processing Payment...</>
+                        ) : (
+                          <>
+                            <DollarSign className="w-5 h-5" />
+                            Pay {payment.payment_amount.toLocaleString()} RLUSD
+                          </>
+                        )}
                       </button>
                       <p className="text-xs text-gray-500 mt-2">
-                        This will create an XRPL Check payable to the NFT holder. They can cash it to receive payment.
+                        This will send {payment.payment_amount.toLocaleString()} RLUSD directly to the NFT holder on-chain. The NFT will be marked as redeemed.
                       </p>
                     </div>
                   </div>
                 );
               })}
-            </div>
-          ) : (
-            <div className="text-center py-12">
-              <DollarSign className="w-16 h-16 text-gray-700 mx-auto mb-4" />
-              <p className="text-gray-400">No pending payments</p>
-              <p className="text-xs text-gray-500 mt-2">Payments due will appear here when your issued NFTs reach maturity</p>
-            </div>
-          )}
+              </div>
+            ) : (
+              <div className="text-center py-12">
+                <DollarSign className="w-16 h-16 text-gray-700 mx-auto mb-4" />
+                <p className="text-gray-400">No pending payments</p>
+                <p className="text-xs text-gray-500 mt-2">Payments due will appear here when your issued NFTs reach maturity</p>
+              </div>
+            ))}
+
+            {/* Payment History Tab */}
+            {paymentsTab === 'history' && (paymentHistory.length > 0 ? (
+              <div className="space-y-4">
+                {paymentHistory.map((payment) => {
+                  const maturityDate = new Date(payment.maturity_date);
+                  const paidDate = payment.paid_at ? new Date(payment.paid_at) : null;
+
+                  return (
+                    <div
+                      key={payment.payment_id}
+                      className="p-6 rounded-lg border-2 bg-gray-800/30 border-gray-700"
+                    >
+                      <div className="flex items-start justify-between mb-4">
+                        <div>
+                          <div className="text-white font-medium mb-1">
+                            {payment.NFTOKEN?.invoice_number || 'Invoice NFT'}
+                          </div>
+                          <div className="text-sm text-gray-400">
+                            Paid to: {payment.creditor_address.substring(0, 15)}...
+                          </div>
+                        </div>
+                        <span className="px-3 py-1 rounded-full text-xs bg-green-950/50 text-green-400 border border-green-900/50">
+                          Completed
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                        <div>
+                          <div className="text-sm text-gray-400 mb-1">Amount Paid</div>
+                          <div className="text-white text-lg font-medium">
+                            {payment.payment_amount.toLocaleString()} RLUSD
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-sm text-gray-400 mb-1">Maturity Date</div>
+                          <div className="text-white">
+                            {maturityDate.toLocaleDateString()}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-sm text-gray-400 mb-1">Payment Date</div>
+                          <div className="text-white">
+                            {paidDate ? paidDate.toLocaleDateString() : 'N/A'}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="pt-4 border-t border-gray-700">
+                        <div className="flex items-center gap-2 text-sm text-gray-400">
+                          <div className="flex-1">
+                            <span className="font-medium">NFT ID:</span>{' '}
+                            <span className="font-mono text-xs">{payment.nftoken_id}</span>
+                          </div>
+                        </div>
+                        {payment.xrpl_check_tx_hash && (
+                          <div className="flex items-center gap-2 text-sm text-gray-400 mt-2">
+                            <span className="font-medium">TX Hash:</span>{' '}
+                            <span className="font-mono text-xs">{payment.xrpl_check_tx_hash}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-12">
+                <DollarSign className="w-16 h-16 text-gray-700 mx-auto mb-4" />
+                <p className="text-gray-400">No payment history</p>
+                <p className="text-xs text-gray-500 mt-2">Completed payments will appear here</p>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 

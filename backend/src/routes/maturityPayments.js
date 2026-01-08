@@ -6,7 +6,8 @@ import {
   recordPaymentCheck,
   markCheckCashed,
   triggerMaturityProcessing,
-  triggerOverdueMarking
+  triggerOverdueMarking,
+  payMaturityPayment
 } from '../controllers/maturityPaymentController.js';
 import { authenticateToken } from '../middleware/auth.js';
 
@@ -45,6 +46,13 @@ router.post('/maturity-payments/record-check', authenticateToken, recordPaymentC
  * Body: { payment_id }
  */
 router.post('/maturity-payments/mark-cashed', authenticateToken, markCheckCashed);
+
+/**
+ * POST /maturity-payments/:id/pay
+ * Pay maturity amount directly via RLUSD transfer
+ * Body: { payment_tx_hash }
+ */
+router.post('/maturity-payments/:id/pay', authenticateToken, payMaturityPayment);
 
 /**
  * POST /maturity-payments/process-matured

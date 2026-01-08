@@ -1,5 +1,5 @@
 import { supabase } from '../config/supabase.js';
-import { hasEnoughRLUSD } from '../services/xrplService.js';
+import { hasEnoughRLUSD, transferRLUSD, transferNFT } from '../services/xrplService.js';
 import { finalizeAuction, processExpiredAuctions } from '../services/auctionFinalizationService.js';
 
 // Create a new auction listing
@@ -220,7 +220,7 @@ export const getUserBids = async (req, res) => {
       .from('AUCTIONBIDS')
       .select(`
         *,
-        AUCTIONLISTING!inner (
+        AUCTIONLISTING!AUCTIONBIDS_aid_fkey (
           aid,
           nftoken_id,
           face_value,
@@ -246,9 +246,12 @@ export const getUserBids = async (req, res) => {
       return res.status(500).json({ error: error.message });
     }
 
+    // Filter out bids where AUCTIONLISTING is null (auction was deleted or unlisted)
+    const validBids = data.filter(bid => bid.AUCTIONLISTING !== null);
+
     // Fetch usernames for all creators
     const creatorAddresses = [...new Set(
-      data
+      validBids
         .filter(bid => bid.AUCTIONLISTING?.NFTOKEN?.created_by)
         .map(bid => bid.AUCTIONLISTING.NFTOKEN.created_by)
     )];
@@ -268,7 +271,7 @@ export const getUserBids = async (req, res) => {
     }
 
     // Add creator_username to each bid's NFTOKEN
-    const bidsWithUsernames = data.map(bid => ({
+    const bidsWithUsernames = validBids.map(bid => ({
       ...bid,
       AUCTIONLISTING: bid.AUCTIONLISTING ? {
         ...bid.AUCTIONLISTING,
@@ -293,20 +296,18 @@ export const getUserBids = async (req, res) => {
 export const placeBid = async (req, res) => {
   try {
     const { id } = req.params; // auction ID
-    const { bid_amount, xrpl_check_id, xrpl_check_tx_hash } = req.body;
+    const { bid_amount } = req.body;
     const { address } = req.user; // From JWT token
+
+    console.log('\n💰 Processing bid placement');
+    console.log('  Auction ID:', id);
+    console.log('  Bidder:', address);
+    console.log('  Bid Amount:', bid_amount);
 
     // Validate required fields
     if (!bid_amount || bid_amount <= 0) {
       return res.status(400).json({
         error: 'Invalid bid amount'
-      });
-    }
-
-    if (!xrpl_check_id || !xrpl_check_tx_hash) {
-      return res.status(400).json({
-        error: 'Missing Check information. Please create XRPL Check before placing bid.',
-        required_fields: ['xrpl_check_id', 'xrpl_check_tx_hash']
       });
     }
 
@@ -367,8 +368,6 @@ export const placeBid = async (req, res) => {
         .from('AUCTIONBIDS')
         .update({
           bid_amount,
-          xrpl_check_id,
-          xrpl_check_tx_hash,
           created_at: new Date().toISOString() // Update timestamp to reflect new bid time
         })
         .eq('bid_id', existingBid.bid_id)
@@ -381,7 +380,7 @@ export const placeBid = async (req, res) => {
       }
       bidData = data;
     } else {
-      // Create new bid
+      // Create new bid (no payment required at this stage)
       console.log(`Creating new bid for auction ${id}`);
       const { data, error: bidError } = await supabase
         .from('AUCTIONBIDS')
@@ -389,9 +388,7 @@ export const placeBid = async (req, res) => {
           aid: id,
           bid_amount,
           bid_by: address,
-          xrpl_check_id,
-          xrpl_check_tx_hash,
-          check_status: 'active'
+          check_status: 'active' // Bid is active; payment happens after winning
         })
         .select()
         .single();
@@ -435,14 +432,14 @@ export const placeBid = async (req, res) => {
       return res.status(500).json({ error: 'Failed to update auction' });
     }
 
-    // XRPL Check created and verified
-    // Check will be cashed when auction expires (see auctionFinalizationService.js)
+    // Bid placed successfully - no payment required yet
+    // Winner will pay after auction expires via "Pay & Claim NFT" button
 
     res.status(201).json({
       success: true,
-      message: 'Bid placed successfully',
+      message: 'Bid placed successfully. If you win, you will be able to pay and claim the NFT.',
       bid: bidData,
-      new_current_bid: bid_amount
+      new_current_bid: newCurrentBid
     });
   } catch (error) {
     console.error('Error in placeBid:', error);
@@ -489,6 +486,182 @@ export const processAllExpiredAuctions = async (req, res) => {
   }
 };
 
+// Get auctions won by user (awaiting payment)
+export const getWonAuctions = async (req, res) => {
+  try {
+    const { address } = req.user; // From JWT token
+
+    const { data, error } = await supabase
+      .from('AUCTIONBIDS')
+      .select(`
+        *,
+        AUCTIONLISTING!AUCTIONBIDS_aid_fkey (
+          aid,
+          nftoken_id,
+          face_value,
+          expiry,
+          min_bid,
+          current_bid,
+          status,
+          NFTOKEN (
+            invoice_number,
+            image_link,
+            created_by,
+            maturity_date
+          )
+        )
+      `)
+      .eq('bid_by', address)
+      .eq('check_status', 'won_unpaid')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching won auctions:', error);
+      return res.status(500).json({ error: error.message });
+    }
+
+    // Fetch usernames for all creators
+    const creatorAddresses = [...new Set(
+      data
+        .filter(bid => bid.AUCTIONLISTING?.NFTOKEN?.created_by)
+        .map(bid => bid.AUCTIONLISTING.NFTOKEN.created_by)
+    )];
+
+    let usernameMap = {};
+    if (creatorAddresses.length > 0) {
+      const { data: users } = await supabase
+        .from('USER')
+        .select('publicKey, username')
+        .in('publicKey', creatorAddresses);
+
+      if (users) {
+        usernameMap = Object.fromEntries(
+          users.map(user => [user.publicKey, user.username])
+        );
+      }
+    }
+
+    // Add creator_username to each bid's NFTOKEN
+    const bidsWithUsernames = data.map(bid => ({
+      ...bid,
+      AUCTIONLISTING: bid.AUCTIONLISTING ? {
+        ...bid.AUCTIONLISTING,
+        NFTOKEN: bid.AUCTIONLISTING.NFTOKEN ? {
+          ...bid.AUCTIONLISTING.NFTOKEN,
+          creator_username: usernameMap[bid.AUCTIONLISTING.NFTOKEN.created_by] || 'Unknown'
+        } : null
+      } : null
+    }));
+
+    console.log(`\n📊 Won auctions for ${address}:`, bidsWithUsernames.length);
+
+    res.json({
+      success: true,
+      wonAuctions: bidsWithUsernames
+    });
+  } catch (error) {
+    console.error('Error in getWonAuctions:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Pay for won auction and claim NFT
+export const payAndClaimNFT = async (req, res) => {
+  try {
+    const { id } = req.params; // auction ID
+    const { payment_tx_hash } = req.body;
+    const { address } = req.user; // From JWT token
+
+    console.log('\n💳 Processing payment and NFT claim');
+    console.log('  Auction ID:', id);
+    console.log('  Winner:', address);
+    console.log('  Payment TX:', payment_tx_hash);
+
+    if (!payment_tx_hash) {
+      return res.status(400).json({
+        error: 'Missing payment transaction hash'
+      });
+    }
+
+    // Get auction with winning bid
+    const { data: auction, error: auctionError } = await supabase
+      .from('AUCTIONLISTING')
+      .select(`
+        *,
+        NFTOKEN(*),
+        AUCTIONBIDS!AUCTIONBIDS_aid_fkey(*)
+      `)
+      .eq('aid', id)
+      .eq('AUCTIONBIDS.check_status', 'won_unpaid')
+      .eq('AUCTIONBIDS.bid_by', address)
+      .single();
+
+    if (auctionError || !auction) {
+      return res.status(404).json({
+        error: 'Won auction not found or you are not the winner'
+      });
+    }
+
+    const winningBid = auction.AUCTIONBIDS[0];
+
+    // TODO: Verify payment transaction on XRPL
+    // For now, we'll trust the payment_tx_hash
+
+    // Transfer NFT from platform to winner
+    const platformSeed = process.env.PLATFORM_WALLET_SEED;
+
+    const nftTransfer = await transferNFT(
+      platformSeed,
+      address,
+      auction.nftoken_id
+    );
+
+    console.log('  ✅ NFT transferred to winner:', nftTransfer.hash);
+
+    // Transfer payment from platform to original owner
+    console.log(`  💸 Transferring ${winningBid.bid_amount} RLUSD from platform to original owner: ${auction.original_owner}`);
+    const paymentTransfer = await transferRLUSD(
+      platformSeed,
+      auction.original_owner,
+      winningBid.bid_amount
+    );
+
+    console.log('  ✅ Payment transferred to original owner:', paymentTransfer.hash);
+
+    // Update bid status to 'paid'
+    await supabase
+      .from('AUCTIONBIDS')
+      .update({
+        check_status: 'paid',
+        xrpl_check_tx_hash: payment_tx_hash
+      })
+      .eq('bid_id', winningBid.bid_id);
+
+    // Update NFT ownership
+    await supabase
+      .from('NFTOKEN')
+      .update({
+        current_owner: address,
+        current_state: 'owned'
+      })
+      .eq('nftoken_id', auction.nftoken_id);
+
+    console.log('  ✅ Payment processed and NFT claimed successfully');
+
+    res.json({
+      success: true,
+      message: 'Payment received and NFT claimed successfully! Original owner has been paid.',
+      nft_transfer_hash: nftTransfer.hash,
+      payment_transfer_hash: paymentTransfer.hash,
+      amount_paid_to_owner: winningBid.bid_amount
+    });
+
+  } catch (error) {
+    console.error('Error in payAndClaimNFT:', error);
+    res.status(500).json({ error: 'Internal server error', message: error.message });
+  }
+};
+
 // Get historical (expired/completed) bids by a specific user
 export const getUserBidsHistory = async (req, res) => {
   try {
@@ -500,7 +673,7 @@ export const getUserBidsHistory = async (req, res) => {
       .from('AUCTIONBIDS')
       .select(`
         *,
-        AUCTIONLISTING!inner (
+        AUCTIONLISTING!AUCTIONBIDS_aid_fkey (
           aid,
           nftoken_id,
           face_value,
@@ -524,12 +697,16 @@ export const getUserBidsHistory = async (req, res) => {
     }
 
     // Filter for historical bids:
-    // 1. Auctions with status != 'active' (completed, unlisted)
+    // EXCLUDE bids with check_status 'won_unpaid' (those go to "Won Auctions" tab)
+    // 1. Auctions with status != 'active' (completed, unlisted) - BUT NOT if bid is won_unpaid
     // 2. OR active auctions that have expired
-    // 3. OR bids with check_status 'cashed' or 'pending_cash'
+    // 3. OR bids with check_status 'cashed', 'paid', or 'pending_cash'
     const data = allBids.filter(bid => {
       const listing = bid.AUCTIONLISTING;
       if (!listing) return false;
+
+      // EXCLUDE won_unpaid bids (they belong in "Won Auctions" tab)
+      if (bid.check_status === 'won_unpaid') return false;
 
       // Check if auction is not active (completed/unlisted)
       if (listing.status !== 'active') return true;
@@ -538,7 +715,7 @@ export const getUserBidsHistory = async (req, res) => {
       if (listing.expiry && new Date(listing.expiry) < new Date(now)) return true;
 
       // Check if bid was already processed
-      if (bid.check_status === 'cashed' || bid.check_status === 'pending_cash') return true;
+      if (bid.check_status === 'cashed' || bid.check_status === 'pending_cash' || bid.check_status === 'paid') return true;
 
       return false;
     });

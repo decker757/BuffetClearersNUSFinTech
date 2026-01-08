@@ -4,6 +4,7 @@ import { getBidsByUser, getNFTokensByOwner } from '../../lib/database';
 import { AuctionBid, NFToken } from '../../lib/supabase';
 import { toast } from 'sonner';
 import { fetchPaymentsToCollect, cashMaturityPaymentCheck, MaturityPayment } from '../../utils/maturityPayment';
+import { transferRLUSDToPlatform } from '../../lib/xrpl-nft';
 
 export function CustomerDashboard({ 
   username,
@@ -16,12 +17,14 @@ export function CustomerDashboard({
 }) {
   const [activeTab, setActiveTab] = useState<'won' | 'bidding' | 'past' | 'payments'>('bidding');
   const [ownedTokens, setOwnedTokens] = useState<NFToken[]>([]);
+  const [wonAuctions, setWonAuctions] = useState<any[]>([]);
   const [activeBids, setActiveBids] = useState<AuctionBid[]>([]);
   const [historicalBids, setHistoricalBids] = useState<AuctionBid[]>([]);
   const [paymentsToCollect, setPaymentsToCollect] = useState<MaturityPayment[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentTime, setCurrentTime] = useState(Date.now());
   const [cashingCheckFor, setCashingCheckFor] = useState<number | null>(null);
+  const [payingForAuction, setPayingForAuction] = useState<number | null>(null);
 
   // Update current time every minute
   useEffect(() => {
@@ -54,11 +57,22 @@ export function CustomerDashboard({
   const loadDashboardData = async () => {
     try {
       setLoading(true);
-      const [bids, history, tokens, payments] = await Promise.all([
+      const [bids, won, history, tokens, payments] = await Promise.all([
         getBidsByUser(publicKey),
+        fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:6767'}/auctions/user/won`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+          }
+        }).then(res => res.json()).then(data => {
+          console.log('Won auctions response:', data);
+          return data.wonAuctions || [];
+        }).catch(err => {
+          console.error('Error fetching won auctions:', err);
+          return [];
+        }),
         fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:6767'}/auctions/user/bids/history`, {
           headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`
+            'Authorization': `Bearer ${localStorage.getItem('authToken')}`
           }
         }).then(res => res.json()).then(data => data.bids || []).catch(() => []),
         getNFTokensByOwner(publicKey),
@@ -67,6 +81,7 @@ export function CustomerDashboard({
 
       // Backend now returns only active bids (superseded bids are filtered out)
       setActiveBids(bids);
+      setWonAuctions(won);
       setHistoricalBids(history);
       setOwnedTokens(tokens);
       setPaymentsToCollect(payments);
@@ -75,6 +90,60 @@ export function CustomerDashboard({
       toast.error('Failed to load dashboard data');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Handler for paying and claiming NFT
+  const handlePayAndClaim = async (wonAuction: any) => {
+    try {
+      setPayingForAuction(wonAuction.AUCTIONLISTING.aid);
+      toast.loading('Processing payment...', { id: 'pay-claim' });
+
+      const walletSeed = prompt('Enter your wallet seed to sign the RLUSD payment transaction:');
+      if (!walletSeed) {
+        toast.dismiss('pay-claim');
+        setPayingForAuction(null);
+        return;
+      }
+
+      // Send RLUSD payment to platform wallet
+      toast.loading('Sending RLUSD payment to platform...', { id: 'pay-claim' });
+      const paymentResult = await transferRLUSDToPlatform({
+        walletSeed,
+        amount: wonAuction.bid_amount
+      });
+
+      if (!paymentResult.success) {
+        toast.error(paymentResult.error || 'Failed to send RLUSD payment', { id: 'pay-claim' });
+        setPayingForAuction(null);
+        return;
+      }
+
+      const paymentTxHash = paymentResult.txHash!;
+      toast.loading('Payment successful! Claiming NFT...', { id: 'pay-claim' });
+
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:6767'}/auctions/${wonAuction.AUCTIONLISTING.aid}/pay`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+        },
+        body: JSON.stringify({ payment_tx_hash: paymentTxHash })
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        toast.success('Payment successful! NFT claimed.', { id: 'pay-claim' });
+        await loadDashboardData();
+      } else {
+        toast.error(result.error || 'Payment failed', { id: 'pay-claim' });
+      }
+    } catch (error) {
+      console.error('Error paying for NFT:', error);
+      toast.error('Failed to process payment', { id: 'pay-claim' });
+    } finally {
+      setPayingForAuction(null);
     }
   };
 
@@ -236,7 +305,7 @@ export function CustomerDashboard({
             >
               <div className="flex items-center justify-center gap-2">
                 <CheckCircle className="w-4 h-4" />
-                Won Auctions ({ownedTokens.length})
+                Won Auctions ({wonAuctions.length})
               </div>
             </button>
             <button
@@ -270,60 +339,79 @@ export function CustomerDashboard({
           <div className="p-6">
             {/* Won Auctions Tab */}
             {activeTab === 'won' && (
-              ownedTokens.length > 0 ? (
+              wonAuctions.length > 0 ? (
                 <div className="space-y-4">
-                  {ownedTokens.map((token) => {
-                    const daysUntilMaturity = token.maturity_date 
-                      ? Math.max(0, Math.ceil((new Date(token.maturity_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
-                      : 0;
-                    
+                  {wonAuctions.map((wonAuction: any) => {
+                    const listing = wonAuction.AUCTIONLISTING;
+                    const nftoken = listing?.NFTOKEN;
+                    const isPaying = payingForAuction === listing?.aid;
+
                     return (
-                      <div key={token.nftoken_id} className="p-6 bg-gray-800/50 border border-gray-700 rounded-lg">
-                        <div className="mb-3">
-                          <span className="text-xs text-gray-500 font-mono">NFT ID: {token.nftoken_id}</span>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                      <div key={wonAuction.bid_id} className="p-6 bg-gray-800/50 border border-green-900/30 rounded-lg">
+                        <div className="flex items-start justify-between mb-4">
                           <div>
-                            <div className="text-sm text-gray-400 mb-1">Invoice Number</div>
-                            <div className="text-white font-medium">{token.invoice_number}</div>
+                            <h3 className="text-lg text-white mb-1">
+                              {nftoken?.invoice_number || 'Unknown Invoice'} (Auction #{listing?.aid})
+                            </h3>
+                            <p className="text-sm text-gray-400">Face Value: {listing?.face_value?.toLocaleString()} RLUSD</p>
                           </div>
-                          <div>
-                            <div className="text-sm text-gray-400 mb-1">Face Value</div>
-                            <div className="text-white">{token.face_value?.toLocaleString()} RLUSD</div>
-                          </div>
-                          <div>
-                            <div className="text-sm text-gray-400 mb-1">Maturity Date</div>
-                            <div className="text-white">
-                              {token.maturity_date ? new Date(token.maturity_date).toLocaleDateString() : 'N/A'}
-                            </div>
-                          </div>
-                          <div>
-                            <div className="text-sm text-gray-400 mb-1">Days Until Maturity</div>
-                            <div className="text-white">{daysUntilMaturity} days</div>
+                          <div className="px-3 py-1 rounded-full text-xs bg-green-900/50 text-green-400 border border-green-800">
+                            You Won!
                           </div>
                         </div>
-                        <div className="pt-4 border-t border-gray-700 mt-4">
-                          <div className="grid grid-cols-2 gap-4">
-                            <div>
-                              <div className="text-sm text-gray-400 mb-1">Issuer</div>
-                              <div className="text-white font-mono text-sm">{token.created_by}</div>
-                            </div>
-                            <div>
-                              <div className="text-sm text-gray-400 mb-1">Status</div>
-                              <span className="inline-block px-2 py-1 bg-green-950/50 text-green-400 border border-green-900/50 rounded text-xs">
-                                {token.current_state}
-                              </span>
-                            </div>
+
+                        <div className="grid grid-cols-3 gap-4 text-sm mb-4">
+                          <div>
+                            <p className="text-gray-500 mb-1">Your Winning Bid</p>
+                            <p className="text-white text-lg font-semibold">{wonAuction.bid_amount?.toLocaleString()} RLUSD</p>
+                          </div>
+                          <div>
+                            <p className="text-gray-500 mb-1">Issuer</p>
+                            <p className="text-white">{nftoken?.creator_username || 'Unknown'}</p>
+                          </div>
+                          <div>
+                            <p className="text-gray-500 mb-1">Maturity Date</p>
+                            <p className="text-white">
+                              {nftoken?.maturity_date ? new Date(nftoken.maturity_date).toLocaleDateString() : 'N/A'}
+                            </p>
                           </div>
                         </div>
+
+                        <div className="p-4 bg-blue-950/30 border border-blue-900/50 rounded-lg mb-4">
+                          <p className="text-sm text-blue-400 mb-2">
+                            <strong>Payment Required:</strong>
+                          </p>
+                          <p className="text-xs text-gray-400">
+                            Send {wonAuction.bid_amount?.toLocaleString()} RLUSD to the platform wallet to claim your NFT.
+                            Payment is processed on-chain via XRPL.
+                          </p>
+                        </div>
+
+                        <button
+                          onClick={() => handlePayAndClaim(wonAuction)}
+                          disabled={isPaying}
+                          className="w-full px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                        >
+                          {isPaying ? (
+                            <>Processing Payment...</>
+                          ) : (
+                            <>
+                              <DollarSign className="w-5 h-5" />
+                              Pay {wonAuction.bid_amount?.toLocaleString()} RLUSD & Claim NFT
+                            </>
+                          )}
+                        </button>
                       </div>
                     );
                   })}
                 </div>
               ) : (
                 <div className="text-center py-12">
-                  <Package className="w-16 h-16 text-gray-700 mx-auto mb-4" />
-                  <p className="text-gray-400 mb-4">No won auctions yet</p>
+                  <CheckCircle className="w-16 h-16 text-gray-700 mx-auto mb-4" />
+                  <p className="text-gray-400 mb-4">No won auctions awaiting payment</p>
+                  <p className="text-xs text-gray-500 mb-6">
+                    When you win an auction, it will appear here for you to pay and claim the NFT
+                  </p>
                   <button
                     onClick={onViewMarketplace}
                     className="px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:opacity-90 transition-opacity"

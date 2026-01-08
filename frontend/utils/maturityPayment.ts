@@ -451,3 +451,104 @@ export async function fetchPaymentHistory(): Promise<{
     throw error;
   }
 }
+
+/**
+ * Pay maturity amount directly via RLUSD transfer
+ * Hotel sends RLUSD to current NFT holder
+ * @param paymentId - The maturity payment ID
+ * @param creditorAddress - Recipient address (NFT holder)
+ * @param amount - Amount to pay in RLUSD
+ * @param debtorSeed - Hotel's wallet seed
+ * @returns Promise<PaymentResult>
+ */
+export async function payMaturityDirectly(
+  paymentId: number,
+  creditorAddress: string,
+  amount: number,
+  debtorSeed: string
+): Promise<PaymentResult> {
+  const client = new xrpl.Client(XRPL_NETWORK);
+
+  try {
+    await client.connect();
+    console.log('🔗 Connected to XRPL');
+
+    // Create wallet from seed
+    const wallet = xrpl.Wallet.fromSeed(debtorSeed);
+    console.log('👛 Hotel wallet:', wallet.address);
+    console.log('💰 Paying', amount, 'RLUSD to', creditorAddress);
+
+    // Create RLUSD payment transaction
+    const paymentTx: xrpl.Payment = {
+      TransactionType: 'Payment',
+      Account: wallet.address,
+      Destination: creditorAddress,
+      Amount: {
+        currency: RLUSD_CURRENCY,
+        value: amount.toString(),
+        issuer: RLUSD_ISSUER,
+      },
+    };
+
+    console.log('📝 Submitting maturity payment transaction...');
+
+    // Submit and wait for validation
+    const result = await client.submitAndWait(paymentTx, { wallet });
+
+    console.log('✅ Transaction validated:', result.result.hash);
+
+    // Check if transaction was successful
+    if (result.result.meta && typeof result.result.meta === 'object') {
+      const meta = result.result.meta as any;
+      if (meta.TransactionResult === 'tesSUCCESS') {
+        const paymentTxHash = result.result.hash;
+
+        // Notify backend that payment was sent
+        const authToken = localStorage.getItem('authToken');
+        if (!authToken) {
+          throw new Error('Authentication required');
+        }
+
+        const response = await fetch(`${BACKEND_URL}/maturity-payments/${paymentId}/pay`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`
+          },
+          body: JSON.stringify({ payment_tx_hash: paymentTxHash })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to record payment');
+        }
+
+        await client.disconnect();
+
+        return {
+          success: true,
+          message: 'Maturity payment sent successfully! NFT marked as redeemed.',
+          data: {
+            txHash: paymentTxHash,
+            amount,
+            recipient: creditorAddress
+          }
+        };
+      } else {
+        throw new Error(`Transaction failed: ${meta.TransactionResult}`);
+      }
+    }
+
+    throw new Error('Transaction failed to execute');
+
+  } catch (error) {
+    console.error('❌ Error paying maturity:', error);
+    await client.disconnect();
+    return {
+      success: false,
+      message: 'Failed to send maturity payment',
+      error: error instanceof Error ? error.message : 'Unknown error occurred'
+    };
+  }
+}
