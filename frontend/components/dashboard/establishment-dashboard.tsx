@@ -5,6 +5,7 @@ import { ListTokenModal } from './list-token-modal';
 import { EstablishmentSettingsModal } from './establishment-settings-modal';
 import { getNFTokensByCreator, getNFTokensByOwner, createNFToken, createAuctionListing, getAuctionListingsByCreator, getBidCountsByAuctions } from '../../lib/database';
 import { NFToken, AuctionListingWithNFT } from '../../lib/supabase';
+import { mintInvoiceNFT } from '../../lib/api';
 import { toast } from 'sonner';
 
 interface EstablishmentInfo {
@@ -127,29 +128,46 @@ export function EstablishmentDashboard({
     contact: ''
   });
 
-  const handleIssueToken = async (token: { invoiceNumber: string; amount: number; maturityDate: string; buyer: string }) => {
+  const handleIssueToken = async (token: {
+    invoiceNumber: string;
+    amount: number;
+    maturityDate: string;
+    buyer: string;
+    buyerPublicKey: string;
+  }) => {
     try {
-      // Generate a unique NFT token ID
-      const nftokenId = `NFT-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      // Show loading toast
+      const loadingToast = toast.loading('Minting NFT... This may take a moment.');
 
-      // Create NFToken in database
-      await createNFToken({
-        nftoken_id: nftokenId,
-        created_by: publicKey,
-        invoice_number: token.invoiceNumber,
-        face_value: token.amount,
-        image_link: null,
-        maturity_date: token.maturityDate,
-        current_owner: token.buyer, // The creditor receives the token
-        current_state: 'issued'
+      // Call backend to mint NFT with full flow:
+      // 1. Save to DB, 2. Generate image (OpenAI), 3. Upload image,
+      // 4. Generate metadata, 5. Upload metadata, 6. Mint on XRPL,
+      // 7. Transfer to creditor, 8. Update DB with NFTokenID
+      const result = await mintInvoiceNFT({
+        invoiceNumber: token.invoiceNumber,
+        faceValue: token.amount,
+        maturityDate: token.maturityDate,
+        creditorPublicKey: token.buyerPublicKey,
+        debtorPublicKey: publicKey // Current user (debtor)
       });
 
-      toast.success('Invoice token created successfully!');
-      setShowIssueModal(false);
-      await loadIssuedTokens();
+      // Dismiss loading toast
+      toast.dismiss(loadingToast);
+
+      if (result.success && result.data) {
+        toast.success(`Invoice NFT minted successfully! NFTokenID: ${result.data.nftokenId.slice(0, 16)}...`);
+        console.log('NFT Minting Result:', result.data);
+
+        setShowIssueModal(false);
+
+        // Reload data to show the new token
+        await loadIssuedTokens();
+      } else {
+        throw new Error(result.message || 'Failed to mint NFT');
+      }
     } catch (error) {
       console.error('Failed to issue token:', error);
-      toast.error('Failed to create token. Please try again.');
+      toast.error(`Failed to mint NFT: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
 

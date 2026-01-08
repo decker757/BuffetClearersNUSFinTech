@@ -1,4 +1,5 @@
 import { ArrowRight, TrendingUp, Shield, Zap } from 'lucide-react';
+import GradientText from './figma/GradientText';
 
 type Page = 'home' | 'marketplace' | 'how-it-works' | 'about' | 'dashboard' | 'sign-in';
 
@@ -17,11 +18,14 @@ export function Hero({ setCurrentPage }: { setCurrentPage: (page: Page) => void 
               Powered by XRPL & RLUSD
             </div>
             
-            <h1 className="text-5xl lg:text-6xl mb-6 text-white">
+            <h1 className="text-5xl lg:text-6xl mb-6 text-white leading-tight">
               Turn Future Payments Into{' '}
-              <span className="bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
+              <GradientText
+                animationSpeed={3}
+                colors={['#60A5FA', '#A78BFA', '#C084FC', '#60A5FA']}
+              >
                 Liquid Assets
-              </span>
+              </GradientText>
             </h1>
             
             <p className="text-xl text-gray-400 mb-8 leading-relaxed">

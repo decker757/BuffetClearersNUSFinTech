@@ -1,32 +1,15 @@
 import { useState, useEffect } from 'react';
-import { Filter, ChevronDown, TrendingUp, Clock, X, Calendar, FileText, Shield, DollarSign, Timer, AlertCircle } from 'lucide-react';
+import { ChevronDown, TrendingUp, Clock, X, Calendar, FileText, Shield, DollarSign, Timer, AlertCircle } from 'lucide-react';
 import { UserRole } from './auth/onboarding';
 import { getActiveAuctionListings, placeBid, getBidCountsByAuctions, getBidsByUser } from '../lib/database';
 import { AuctionListingWithNFT } from '../lib/supabase';
 import { toast } from 'sonner';
 
-const categories = [
-  { id: 'all', label: 'All items' },
-  { id: 'tech', label: 'Technology' },
-  { id: 'manufacturing', label: 'Manufacturing' },
-  { id: 'retail', label: 'Retail' },
-  { id: 'logistics', label: 'Logistics' },
-  { id: 'healthcare', label: 'Healthcare' },
-  { id: 'energy', label: 'Energy' },
-  { id: 'construction', label: 'Construction' },
-  { id: 'food', label: 'Food' },
-];
-
 export function Marketplace({ userPublicKey, userRole }: { userPublicKey: string | null, userRole: UserRole | null }) {
   const [sortBy, setSortBy] = useState('recently-added');
-  const [selectedCategory, setSelectedCategory] = useState('all');
-  const [priceFilter, setPriceFilter] = useState('lowest');
-  const [likesFilter, setLikesFilter] = useState('most-bids');
-  const [creatorFilter, setCreatorFilter] = useState('verified');
+  const [maxPrice, setMaxPrice] = useState(200000);
   const [priceRange, setPriceRange] = useState([0, 200000]);
   const [selectedAuction, setSelectedAuction] = useState<AuctionListingWithNFT | null>(null);
-  const [showFilters, setShowFilters] = useState(false);
-  const [userBids, setUserBids] = useState<AuctionBid[]>([]);
   const [confirmationData, setConfirmationData] = useState<{ auction: AuctionListingWithNFT, bidAmount: string } | null>(null);
   const [auctionListings, setAuctionListings] = useState<AuctionListingWithNFT[]>([]);
   const [loading, setLoading] = useState(true);
@@ -47,12 +30,6 @@ export function Marketplace({ userPublicKey, userRole }: { userPublicKey: string
     loadAuctionListings();
   }, []);
 
-  // Load user's bids
-  useEffect(() => {
-    if (userPublicKey) {
-      loadUserBids();
-    }
-  }, [userPublicKey]);
 
   const loadAuctionListings = async () => {
     try {
@@ -62,6 +39,17 @@ export function Marketplace({ userPublicKey, userRole }: { userPublicKey: string
       console.log('Loaded listings:', listings);
       console.log('Number of listings:', listings.length);
       setAuctionListings(listings);
+
+      // Calculate dynamic max price based on highest current bid
+      if (listings.length > 0) {
+        const highestBid = Math.max(...listings.map(l => l.current_bid || 0));
+        // Add 20% headroom and round to nearest 10k
+        const calculatedMax = Math.ceil((highestBid * 1.2) / 10000) * 10000;
+        // Ensure minimum of 200k for better UX
+        const newMaxPrice = Math.max(200000, calculatedMax);
+        setMaxPrice(newMaxPrice);
+        setPriceRange([0, newMaxPrice]);
+      }
 
       // Load bid counts for each auction
       const aids = listings.map(l => l.aid);
@@ -75,16 +63,6 @@ export function Marketplace({ userPublicKey, userRole }: { userPublicKey: string
     }
   };
 
-  const loadUserBids = async () => {
-    if (!userPublicKey) return;
-
-    try {
-      const bids = await getBidsByUser(userPublicKey);
-      setUserBids(bids);
-    } catch (error) {
-      console.error('Failed to load user bids:', error);
-    }
-  };
 
   const handleShowConfirmation = (auction: AuctionListingWithNFT, bidAmount: string) => {
     setConfirmationData({ auction, bidAmount });
@@ -103,7 +81,6 @@ export function Marketplace({ userPublicKey, userRole }: { userPublicKey: string
       setConfirmationData(null);
       setSelectedAuction(null);
       await loadAuctionListings();
-      await loadUserBids();
     } catch (error) {
       console.error('Failed to place bid:', error);
       toast.error('Failed to place bid. Please try again.');
@@ -137,40 +114,13 @@ export function Marketplace({ userPublicKey, userRole }: { userPublicKey: string
 
   // Filter and sort auctions
   const filteredAndSortedAuctions = auctionListings
-    // Note: We now show ALL auctions, including ones the user has bid on
-    // This allows investors to track their bids and place additional bids if desired
-    // Filter by category (if we add category to NFTOKEN)
-    .filter((auction) => {
-      if (selectedCategory === 'all') return true;
-      // For now, show all since we don't have categories in the schema
-      return true;
-    })
     // Filter by price range
     .filter((auction) => {
       const currentBid = auction.current_bid || 0;
       return currentBid <= priceRange[1] && currentBid >= priceRange[0];
     })
-    // Sort based on active filters
+    // Sort based on main dropdown (PRIMARY SORT)
     .sort((a, b) => {
-      // Priority 1: Price filter (from filter panel)
-      if (priceFilter === 'highest') {
-        const priceDiff = (b.current_bid || 0) - (a.current_bid || 0);
-        if (priceDiff !== 0) return priceDiff;
-      } else if (priceFilter === 'lowest') {
-        const priceDiff = (a.current_bid || 0) - (b.current_bid || 0);
-        if (priceDiff !== 0) return priceDiff;
-      }
-
-      // Priority 2: Bids filter (from filter panel)
-      if (likesFilter === 'most-bids') {
-        const bidsDiff = (bidCounts[b.aid] || 0) - (bidCounts[a.aid] || 0);
-        if (bidsDiff !== 0) return bidsDiff;
-      } else if (likesFilter === 'least-bids') {
-        const bidsDiff = (bidCounts[a.aid] || 0) - (bidCounts[b.aid] || 0);
-        if (bidsDiff !== 0) return bidsDiff;
-      }
-
-      // Priority 3: Main sort dropdown (as tiebreaker)
       if (sortBy === 'recently-added') {
         return new Date(b.time_created).getTime() - new Date(a.time_created).getTime();
       } else if (sortBy === 'ending-soon') {
@@ -184,7 +134,6 @@ export function Marketplace({ userPublicKey, userRole }: { userPublicKey: string
         const bDiscount = b.face_value && b.current_bid ? ((b.face_value - b.current_bid) / b.face_value) * 100 : 0;
         return bDiscount - aDiscount;
       }
-
       return 0;
     });
 
@@ -213,133 +162,49 @@ export function Marketplace({ userPublicKey, userRole }: { userPublicKey: string
           <div className="mb-8">
             <h1 className="text-4xl lg:text-5xl text-white mb-8">Discover</h1>
 
-            <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 mb-8">
-              {/* Sort Dropdown */}
-              <div className="relative">
-                <select
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value)}
-                  className="appearance-none px-4 py-2.5 pr-10 bg-gray-900 border border-gray-800 rounded-lg text-white text-sm focus:outline-none focus:border-blue-600 transition-colors cursor-pointer"
-                >
-                  <option value="recently-added">Recently added</option>
-                  <option value="ending-soon">Ending soon</option>
-                  <option value="highest-value">Highest value</option>
-                  <option value="best-discount">Best discount</option>
-                </select>
-                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
-              </div>
-
-              {/* Category Pills */}
-              <div className="flex flex-wrap gap-2">
-                {categories.map((category) => (
-                  <button
-                    key={category.id}
-                    onClick={() => setSelectedCategory(category.id)}
-                    className={`px-4 py-2 rounded-lg text-sm transition-all ${
-                      selectedCategory === category.id
-                        ? 'bg-white text-gray-900'
-                        : 'bg-gray-900 text-gray-400 hover:text-white border border-gray-800 hover:border-gray-700'
-                    }`}
-                  >
-                    {category.label}
-                  </button>
-                ))}
-              </div>
-
-              {/* Filter Button */}
-              <button className="px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 text-sm" onClick={() => setShowFilters(!showFilters)}>
-                <Filter className="w-4 h-4" />
-                Filter
-              </button>
-            </div>
-
-            {/* Filter Bar */}
-            {showFilters && (
-              <div className="bg-gray-900/50 border border-gray-800 rounded-xl p-6 backdrop-blur-sm">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                  {/* Price Sort */}
-                  <div>
-                    <label className="block text-xs text-gray-400 uppercase mb-2 tracking-wide">
-                      Price
-                    </label>
-                    <div className="relative">
-                      <select
-                        value={priceFilter}
-                        onChange={(e) => setPriceFilter(e.target.value)}
-                        className="appearance-none w-full px-4 py-2.5 pr-10 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-600 transition-colors cursor-pointer"
-                      >
-                        <option value="highest">Highest price</option>
-                        <option value="lowest">Lowest price</option>
-                      </select>
-                      <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
-                    </div>
-                  </div>
-
-                  {/* Bids Filter */}
-                  <div>
-                    <label className="block text-xs text-gray-400 uppercase mb-2 tracking-wide">
-                      Bids
-                    </label>
-                    <div className="relative">
-                      <select
-                        value={likesFilter}
-                        onChange={(e) => setLikesFilter(e.target.value)}
-                        className="appearance-none w-full px-4 py-2.5 pr-10 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-600 transition-colors cursor-pointer"
-                      >
-                        <option value="most-bids">Most bids</option>
-                        <option value="least-bids">Least bids</option>
-                      </select>
-                      <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
-                    </div>
-                  </div>
-
-                  {/* Creator Filter */}
-                  <div>
-                    <label className="block text-xs text-gray-400 uppercase mb-2 tracking-wide">
-                      Creator
-                    </label>
-                    <div className="relative">
-                      <select
-                        value={creatorFilter}
-                        onChange={(e) => setCreatorFilter(e.target.value)}
-                        className="appearance-none w-full px-4 py-2.5 pr-10 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-600 transition-colors cursor-pointer"
-                      >
-                        <option value="verified">Verified only</option>
-                        <option value="all">All creators</option>
-                      </select>
-                      <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
-                    </div>
-                  </div>
-
-                  {/* Price Range */}
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <label className="block text-xs text-gray-400 uppercase tracking-wide">
-                        Price Range
-                      </label>
-                      <span className="text-xs text-white bg-gray-800 px-2 py-1 rounded">
-                        RLUSD
-                      </span>
-                    </div>
-                    <div className="space-y-2">
-                      <input
-                        type="range"
-                        min="0"
-                        max="200000"
-                        step="5000"
-                        value={priceRange[1]}
-                        onChange={(e) => setPriceRange([priceRange[0], parseInt(e.target.value)])}
-                        className="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-600"
-                      />
-                      <div className="flex justify-between text-xs text-gray-400">
-                        <span>0 RLUSD</span>
-                        <span>{priceRange[1].toLocaleString()} RLUSD</span>
-                      </div>
-                    </div>
+            <div className="bg-gray-900/50 border border-gray-800 rounded-xl p-4 backdrop-blur-sm mb-8">
+              <div className="flex flex-col lg:flex-row items-start lg:items-center gap-4 lg:gap-8">
+                {/* Sort Dropdown */}
+                <div className="flex items-center gap-2 whitespace-nowrap">
+                  <span className="text-gray-400 text-sm">Sort by:</span>
+                  <div className="relative">
+                    <select
+                      value={sortBy}
+                      onChange={(e) => setSortBy(e.target.value)}
+                      className="appearance-none px-4 py-2.5 pr-10 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-600 transition-colors cursor-pointer"
+                    >
+                      <option value="recently-added">Recently Added</option>
+                      <option value="ending-soon">Ending Soon</option>
+                      <option value="highest-value">Highest Value</option>
+                      <option value="best-discount">Best Discount</option>
+                    </select>
+                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
                   </div>
                 </div>
+
+                {/* Divider */}
+                <div className="hidden lg:block w-px h-8 bg-gray-700"></div>
+
+                {/* Price Range Filter */}
+                <div className="flex items-center gap-4 flex-1 w-full lg:w-auto">
+                  <span className="text-gray-400 text-sm whitespace-nowrap">Max Price:</span>
+                  <div className="flex-1 max-w-md">
+                    <input
+                      type="range"
+                      min="0"
+                      max={maxPrice}
+                      step={Math.max(1000, Math.floor(maxPrice / 100))}
+                      value={priceRange[1]}
+                      onChange={(e) => setPriceRange([priceRange[0], parseInt(e.target.value)])}
+                      className="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                    />
+                  </div>
+                  <span className="text-white text-sm font-medium whitespace-nowrap min-w-30 text-right">
+                    {priceRange[1].toLocaleString()} RLUSD
+                  </span>
+                </div>
               </div>
-            )}
+            </div>
           </div>
 
           {/* Cards Grid */}

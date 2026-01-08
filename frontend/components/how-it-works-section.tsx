@@ -13,50 +13,50 @@ export function HowItWorksSection() {
           </p>
         </div>
 
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
-          <div className="relative group">
-            <div className="bg-gray-900/50 border border-gray-800 rounded-2xl p-8 hover:border-blue-600/50 transition-all h-full">
-              <div className="w-14 h-14 bg-gradient-to-br from-blue-600 to-purple-600 rounded-xl flex items-center justify-center mb-6">
+        <div className="grid equal-height-grid md:grid-cols-2 lg:grid-cols-4 gap-8">
+          <div>
+            <div className="relative group bg-gray-900/50 border border-gray-800 rounded-2xl p-8 hover:border-blue-600/50 transition-all h-full flex flex-col">
+              <div className="w-14 h-14 bg-gradient-to-br from-blue-600 to-purple-600 rounded-xl flex items-center justify-center mb-6 flex-shrink-0">
                 <FileText className="w-7 h-7 text-white" />
               </div>
-              <h3 className="text-xl text-white mb-3">Debtor Acknowledges</h3>
-              <p className="text-gray-400">
+              <h3 className="text-xl text-white mb-3 flex-shrink-0">Debtor Acknowledges</h3>
+              <p className="text-gray-400 flex-grow">
                 Debtor acknowledges their payment obligation to creditor, setting the maturity date
               </p>
             </div>
           </div>
 
-          <div className="relative group">
-            <div className="bg-gray-900/50 border border-gray-800 rounded-2xl p-8 hover:border-purple-600/50 transition-all h-full">
-              <div className="w-14 h-14 bg-gradient-to-br from-purple-600 to-pink-600 rounded-xl flex items-center justify-center mb-6">
+          <div>
+            <div className="relative group bg-gray-900/50 border border-gray-800 rounded-2xl p-8 hover:border-purple-600/50 transition-all h-full flex flex-col">
+              <div className="w-14 h-14 bg-gradient-to-br from-purple-600 to-pink-600 rounded-xl flex items-center justify-center mb-6 flex-shrink-0">
                 <Coins className="w-7 h-7 text-white" />
               </div>
-              <h3 className="text-xl text-white mb-3">Creditor Mints NFT</h3>
-              <p className="text-gray-400">
+              <h3 className="text-xl text-white mb-3 flex-shrink-0">Creditor Mints NFT</h3>
+              <p className="text-gray-400 flex-grow">
                 Creditor mints the receivable as an NFT on XRPL, representing the right to future payment from debtor
               </p>
             </div>
           </div>
 
-          <div className="relative group">
-            <div className="bg-gray-900/50 border border-gray-800 rounded-2xl p-8 hover:border-pink-600/50 transition-all h-full">
-              <div className="w-14 h-14 bg-gradient-to-br from-pink-600 to-orange-600 rounded-xl flex items-center justify-center mb-6">
+          <div>
+            <div className="relative group bg-gray-900/50 border border-gray-800 rounded-2xl p-8 hover:border-pink-600/50 transition-all h-full flex flex-col">
+              <div className="w-14 h-14 bg-gradient-to-br from-pink-600 to-orange-600 rounded-xl flex items-center justify-center mb-6 flex-shrink-0">
                 <TrendingUp className="w-7 h-7 text-white" />
               </div>
-              <h3 className="text-xl text-white mb-3">Auction NFT</h3>
-              <p className="text-gray-400">
+              <h3 className="text-xl text-white mb-3 flex-shrink-0">Auction NFT</h3>
+              <p className="text-gray-400 flex-grow">
                 Investors bid in RLUSD. Highest bidder owns the NFT and right to collect payment from debtor at maturity
               </p>
             </div>
           </div>
 
-          <div className="relative group">
-            <div className="bg-gray-900/50 border border-gray-800 rounded-2xl p-8 hover:border-orange-600/50 transition-all h-full">
-              <div className="w-14 h-14 bg-gradient-to-br from-orange-600 to-red-600 rounded-xl flex items-center justify-center mb-6">
+          <div>
+            <div className="relative group bg-gray-900/50 border border-gray-800 rounded-2xl p-8 hover:border-orange-600/50 transition-all h-full flex flex-col">
+              <div className="w-14 h-14 bg-gradient-to-br from-orange-600 to-red-600 rounded-xl flex items-center justify-center mb-6 flex-shrink-0">
                 <Lock className="w-7 h-7 text-white" />
               </div>
-              <h3 className="text-xl text-white mb-3">Automatic Payout</h3>
-              <p className="text-gray-400">
+              <h3 className="text-xl text-white mb-3 flex-shrink-0">Automatic Payout</h3>
+              <p className="text-gray-400 flex-grow">
                 At maturity, debtor pays the full invoice amount in RLUSD to the NFT holder (investor)
               </p>
             </div>
