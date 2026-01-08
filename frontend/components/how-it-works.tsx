@@ -35,64 +35,64 @@ export function HowItWorks() {
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid equal-height-grid md:grid-cols-2 lg:grid-cols-4 gap-6">
             {/* Step 1 */}
-            <div className="relative">
-              <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 hover:border-blue-600/50 transition-all">
+            <div>
+              <div className="relative bg-gray-900 border border-gray-800 rounded-2xl p-6 hover:border-blue-600/50 transition-all h-full flex flex-col">
                 <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-purple-600 rounded-xl flex items-center justify-center mb-4">
                   <FileText className="w-6 h-6 text-white" />
                 </div>
-                <h3 className="text-xl text-white mb-3">Receive Invoice</h3>
-                <p className="text-gray-400 text-sm">
+                <h3 className="text-xl text-white mb-3 flex-shrink-0">Receive Invoice</h3>
+                <p className="text-gray-400 text-sm flex-grow">
                   A debtor acknowledges their obligation to you, with payment due at maturity
                 </p>
-              </div>
-              {/* Arrow */}
-              <div className="hidden lg:block absolute top-1/2 -right-3 transform -translate-y-1/2 z-10">
-                <ArrowRight className="w-6 h-6 text-blue-600" />
+                {/* Arrow */}
+                <div className="hidden lg:block absolute top-1/2 -right-3 transform -translate-y-1/2 z-10">
+                  <ArrowRight className="w-6 h-6 text-blue-600" />
+                </div>
               </div>
             </div>
 
             {/* Step 2 */}
-            <div className="relative">
-              <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 hover:border-blue-600/50 transition-all">
+            <div>
+              <div className="relative bg-gray-900 border border-gray-800 rounded-2xl p-6 hover:border-blue-600/50 transition-all h-full flex flex-col">
                 <div className="w-12 h-12 bg-gradient-to-br from-purple-600 to-pink-600 rounded-xl flex items-center justify-center mb-4">
                   <Coins className="w-6 h-6 text-white" />
                 </div>
-                <h3 className="text-xl text-white mb-3">Mint NFT</h3>
-                <p className="text-gray-400 text-sm">
+                <h3 className="text-xl text-white mb-3 flex-shrink-0">Mint NFT</h3>
+                <p className="text-gray-400 text-sm flex-grow">
                   You mint the invoice as an NFT on XRPL. This NFT represents your claim to future payment from the debtor
                 </p>
-              </div>
-              <div className="hidden lg:block absolute top-1/2 -right-3 transform -translate-y-1/2 z-10">
-                <ArrowRight className="w-6 h-6 text-purple-600" />
+                <div className="hidden lg:block absolute top-1/2 -right-3 transform -translate-y-1/2 z-10">
+                  <ArrowRight className="w-6 h-6 text-purple-600" />
+                </div>
               </div>
             </div>
 
             {/* Step 3 */}
-            <div className="relative">
-              <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 hover:border-blue-600/50 transition-all">
+            <div>
+              <div className="relative bg-gray-900 border border-gray-800 rounded-2xl p-6 hover:border-blue-600/50 transition-all h-full flex flex-col">
                 <div className="w-12 h-12 bg-gradient-to-br from-pink-600 to-orange-600 rounded-xl flex items-center justify-center mb-4">
                   <TrendingUp className="w-6 h-6 text-white" />
                 </div>
-                <h3 className="text-xl text-white mb-3">List on Auction</h3>
-                <p className="text-gray-400 text-sm">
+                <h3 className="text-xl text-white mb-3 flex-shrink-0">List on Auction</h3>
+                <p className="text-gray-400 text-sm flex-grow">
                   Investors bid on your NFT in RLUSD. Highest bidder gets the NFT and future payout rights
                 </p>
-              </div>
-              <div className="hidden lg:block absolute top-1/2 -right-3 transform -translate-y-1/2 z-10">
-                <ArrowRight className="w-6 h-6 text-pink-600" />
+                <div className="hidden lg:block absolute top-1/2 -right-3 transform -translate-y-1/2 z-10">
+                  <ArrowRight className="w-6 h-6 text-pink-600" />
+                </div>
               </div>
             </div>
 
             {/* Step 4 */}
-            <div className="relative">
-              <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 hover:border-blue-600/50 transition-all">
+            <div>
+              <div className="relative bg-gray-900 border border-gray-800 rounded-2xl p-6 hover:border-blue-600/50 transition-all h-full flex flex-col">
                 <div className="w-12 h-12 bg-gradient-to-br from-orange-600 to-red-600 rounded-xl flex items-center justify-center mb-4">
                   <Lock className="w-6 h-6 text-white" />
                 </div>
-                <h3 className="text-xl text-white mb-3">Get Paid Now</h3>
-                <p className="text-gray-400 text-sm">
+                <h3 className="text-xl text-white mb-3 flex-shrink-0">Get Paid Now</h3>
+                <p className="text-gray-400 text-sm flex-grow">
                   Receive RLUSD instantly from the winning investor (at a discount). They'll collect full amount at maturity
                 </p>
               </div>
@@ -116,63 +116,63 @@ export function HowItWorks() {
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid equal-height-grid md:grid-cols-2 lg:grid-cols-4 gap-6">
             {/* Step 1 */}
-            <div className="relative">
-              <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 hover:border-purple-600/50 transition-all">
+            <div>
+              <div className="relative bg-gray-900 border border-gray-800 rounded-2xl p-6 hover:border-purple-600/50 transition-all h-full flex flex-col">
                 <div className="w-12 h-12 bg-gradient-to-br from-cyan-600 to-blue-600 rounded-xl flex items-center justify-center mb-4">
                   <Users className="w-6 h-6 text-white" />
                 </div>
-                <h3 className="text-xl text-white mb-3">Browse Auctions</h3>
-                <p className="text-gray-400 text-sm">
+                <h3 className="text-xl text-white mb-3 flex-shrink-0">Browse Auctions</h3>
+                <p className="text-gray-400 text-sm flex-grow">
                   Explore verified invoice NFTs with detailed information and risk assessments
                 </p>
-              </div>
-              <div className="hidden lg:block absolute top-1/2 -right-3 transform -translate-y-1/2 z-10">
-                <ArrowRight className="w-6 h-6 text-cyan-600" />
+                <div className="hidden lg:block absolute top-1/2 -right-3 transform -translate-y-1/2 z-10">
+                  <ArrowRight className="w-6 h-6 text-cyan-600" />
+                </div>
               </div>
             </div>
 
             {/* Step 2 */}
-            <div className="relative">
-              <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 hover:border-purple-600/50 transition-all">
+            <div>
+              <div className="relative bg-gray-900 border border-gray-800 rounded-2xl p-6 hover:border-purple-600/50 transition-all h-full flex flex-col">
                 <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center mb-4">
                   <TrendingUp className="w-6 h-6 text-white" />
                 </div>
-                <h3 className="text-xl text-white mb-3">Place Bids</h3>
-                <p className="text-gray-400 text-sm">
+                <h3 className="text-xl text-white mb-3 flex-shrink-0">Place Bids</h3>
+                <p className="text-gray-400 text-sm flex-grow">
                   Submit competitive bids in RLUSD stablecoin for invoices that match your criteria
                 </p>
-              </div>
-              <div className="hidden lg:block absolute top-1/2 -right-3 transform -translate-y-1/2 z-10">
-                <ArrowRight className="w-6 h-6 text-blue-600" />
+                <div className="hidden lg:block absolute top-1/2 -right-3 transform -translate-y-1/2 z-10">
+                  <ArrowRight className="w-6 h-6 text-blue-600" />
+                </div>
               </div>
             </div>
 
             {/* Step 3 */}
-            <div className="relative">
-              <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 hover:border-purple-600/50 transition-all">
+            <div>
+              <div className="relative bg-gray-900 border border-gray-800 rounded-2xl p-6 hover:border-purple-600/50 transition-all h-full flex flex-col">
                 <div className="w-12 h-12 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-xl flex items-center justify-center mb-4">
                   <Shield className="w-6 h-6 text-white" />
                 </div>
-                <h3 className="text-xl text-white mb-3">Win Auction</h3>
-                <p className="text-gray-400 text-sm">
+                <h3 className="text-xl text-white mb-3 flex-shrink-0">Win Auction</h3>
+                <p className="text-gray-400 text-sm flex-grow">
                   Win the auction and own the NFT. You now have the right to collect from debtor at maturity
                 </p>
-              </div>
-              <div className="hidden lg:block absolute top-1/2 -right-3 transform -translate-y-1/2 z-10">
-                <ArrowRight className="w-6 h-6 text-indigo-600" />
+                <div className="hidden lg:block absolute top-1/2 -right-3 transform -translate-y-1/2 z-10">
+                  <ArrowRight className="w-6 h-6 text-indigo-600" />
+                </div>
               </div>
             </div>
 
             {/* Step 4 */}
-            <div className="relative">
-              <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 hover:border-purple-600/50 transition-all">
+            <div>
+              <div className="relative bg-gray-900 border border-gray-800 rounded-2xl p-6 hover:border-purple-600/50 transition-all h-full flex flex-col">
                 <div className="w-12 h-12 bg-gradient-to-br from-purple-600 to-pink-600 rounded-xl flex items-center justify-center mb-4">
                   <Zap className="w-6 h-6 text-white" />
                 </div>
-                <h3 className="text-xl text-white mb-3">Collect Payout</h3>
-                <p className="text-gray-400 text-sm">
+                <h3 className="text-xl text-white mb-3 flex-shrink-0">Collect Payout</h3>
+                <p className="text-gray-400 text-sm flex-grow">
                   At maturity, debtor pays you the full invoice amount in RLUSD. You earn the discount as profit
                 </p>
               </div>
