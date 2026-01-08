@@ -275,7 +275,7 @@ export function Marketplace({ userPublicKey, userRole }: { userPublicKey: string
                         <div>
                           <h3 className="text-white mb-1">{auction.NFTOKEN?.invoice_number || 'Invoice NFT'}</h3>
                           <p className="text-gray-400 text-sm">
-                            Issuer: {auction.NFTOKEN?.created_by?.substring(0, 8)}...
+                            Issuer: {auction.NFTOKEN?.creator_username || 'Unknown'}
                           </p>
                         </div>
                         <Shield className="w-5 h-5 text-blue-400" />
@@ -472,7 +472,7 @@ function AuctionDetailModal({
               <Shield className="w-4 h-4" />
               <span className="text-sm">Issuer</span>
             </div>
-            <p className="text-white font-mono text-sm">{auction.NFTOKEN?.created_by}</p>
+            <p className="text-white text-sm">{auction.NFTOKEN?.creator_username || 'Unknown'}</p>
           </div>
 
           {/* Place Bid Form (only for investors) */}

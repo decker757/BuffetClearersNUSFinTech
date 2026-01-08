@@ -87,7 +87,8 @@ export const getActiveAuctions = async (req, res) => {
           image_link,
           maturity_date,
           current_owner,
-          current_state
+          current_state,
+          created_by
         )
       `)
       .gte('expiry', now)
@@ -98,9 +99,39 @@ export const getActiveAuctions = async (req, res) => {
       return res.status(500).json({ error: error.message });
     }
 
+    // Fetch usernames for all creators
+    const creatorAddresses = [...new Set(
+      data
+        .filter(auction => auction.NFTOKEN?.created_by)
+        .map(auction => auction.NFTOKEN.created_by)
+    )];
+
+    let usernameMap = {};
+    if (creatorAddresses.length > 0) {
+      const { data: users } = await supabase
+        .from('USER')
+        .select('publicKey, username')
+        .in('publicKey', creatorAddresses);
+
+      if (users) {
+        usernameMap = Object.fromEntries(
+          users.map(user => [user.publicKey, user.username])
+        );
+      }
+    }
+
+    // Add creator_username to each auction's NFTOKEN
+    const auctionsWithUsernames = data.map(auction => ({
+      ...auction,
+      NFTOKEN: auction.NFTOKEN ? {
+        ...auction.NFTOKEN,
+        creator_username: usernameMap[auction.NFTOKEN.created_by] || 'Unknown'
+      } : null
+    }));
+
     res.json({
       success: true,
-      auctions: data
+      auctions: auctionsWithUsernames
     });
   } catch (error) {
     console.error('Error in getActiveAuctions:', error);
@@ -196,7 +227,8 @@ export const getUserBids = async (req, res) => {
           current_bid,
           NFTOKEN (
             invoice_number,
-            image_link
+            image_link,
+            created_by
           )
         )
       `)
@@ -208,9 +240,42 @@ export const getUserBids = async (req, res) => {
       return res.status(500).json({ error: error.message });
     }
 
+    // Fetch usernames for all creators
+    const creatorAddresses = [...new Set(
+      data
+        .filter(bid => bid.AUCTIONLISTING?.NFTOKEN?.created_by)
+        .map(bid => bid.AUCTIONLISTING.NFTOKEN.created_by)
+    )];
+
+    let usernameMap = {};
+    if (creatorAddresses.length > 0) {
+      const { data: users } = await supabase
+        .from('USER')
+        .select('publicKey, username')
+        .in('publicKey', creatorAddresses);
+
+      if (users) {
+        usernameMap = Object.fromEntries(
+          users.map(user => [user.publicKey, user.username])
+        );
+      }
+    }
+
+    // Add creator_username to each bid's NFTOKEN
+    const bidsWithUsernames = data.map(bid => ({
+      ...bid,
+      AUCTIONLISTING: bid.AUCTIONLISTING ? {
+        ...bid.AUCTIONLISTING,
+        NFTOKEN: bid.AUCTIONLISTING.NFTOKEN ? {
+          ...bid.AUCTIONLISTING.NFTOKEN,
+          creator_username: usernameMap[bid.AUCTIONLISTING.NFTOKEN.created_by] || 'Unknown'
+        } : null
+      } : null
+    }));
+
     res.json({
       success: true,
-      bids: data
+      bids: bidsWithUsernames
     });
   } catch (error) {
     console.error('Error in getUserBids:', error);

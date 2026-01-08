@@ -38,6 +38,7 @@ export interface User {
 export interface NFToken {
   nftoken_id: string;
   created_by: string | null;
+  creator_username?: string; // Username of creator (populated by backend)
   invoice_number: string | null;
   face_value: number | null;
   image_link: string | null;

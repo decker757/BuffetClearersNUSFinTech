@@ -335,8 +335,8 @@ export function CustomerDashboard({
                           </div>
                           <div>
                             <div className="text-sm text-gray-400 mb-1">Issuer</div>
-                            <div className="text-white text-sm font-mono">
-                              {nftoken?.created_by?.substring(0, 16)}...
+                            <div className="text-white text-sm">
+                              {nftoken?.creator_username || 'Unknown'}
                             </div>
                           </div>
                         </div>
