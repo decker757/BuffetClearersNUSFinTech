@@ -30,6 +30,7 @@ export function IssueTokenModal({
 
   const [establishments, setEstablishments] = useState<User[]>([]);
   const [loadingEstablishments, setLoadingEstablishments] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Fetch all establishment users when modal opens
   useEffect(() => {
@@ -53,7 +54,7 @@ export function IssueTokenModal({
     fetchEstablishments();
   }, [currentUserPublicKey]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     // Validate that user is not creating an invoice to themselves
@@ -72,13 +73,18 @@ export function IssueTokenModal({
       return;
     }
 
-    onIssue({
-      invoiceNumber: formData.invoiceNumber,
-      amount: parseFloat(formData.amount),
-      maturityDate: formData.maturityDate,
-      buyer: selectedEstablishment.username,
-      buyerPublicKey: formData.creditorPublicKey
-    });
+    setIsSubmitting(true);
+    try {
+      await onIssue({
+        invoiceNumber: formData.invoiceNumber,
+        amount: parseFloat(formData.amount),
+        maturityDate: formData.maturityDate,
+        buyer: selectedEstablishment.username,
+        buyerPublicKey: formData.creditorPublicKey
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -187,15 +193,17 @@ export function IssueTokenModal({
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 px-4 py-3 border border-gray-700 text-gray-300 rounded-lg hover:bg-gray-800 transition-colors"
+              disabled={isSubmitting}
+              className="flex-1 px-4 py-3 border border-gray-700 text-gray-300 rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="flex-1 px-4 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:opacity-90 transition-opacity"
+              disabled={isSubmitting || !formData.invoiceNumber || !formData.amount || !formData.maturityDate || !formData.creditorPublicKey}
+              className="flex-1 px-4 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Issue Token
+              {isSubmitting ? 'Issuing...' : 'Issue Token'}
             </button>
           </div>
         </form>

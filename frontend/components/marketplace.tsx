@@ -616,7 +616,7 @@ function BidConfirmationModal({
               {isPlacingBid ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  Creating Escrow...
+                  Placing Bid...
                 </>
               ) : (
                 'Confirm Bid'

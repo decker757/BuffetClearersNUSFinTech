@@ -147,7 +147,7 @@ export function WonAuctionsSection({ publicKey }: { publicKey: string }) {
                     <CreditCard className="w-8 h-8 text-white" />
                   </div>
                   <h3 className="text-2xl text-white mb-2">Complete Payment</h3>
-                  <p className="text-sm text-gray-400">Finalize the swap: Pay RLUSD → Receive NFT</p>
+                  <p className="text-sm text-gray-400">Finalise the swap: Pay RLUSD → Receive NFT</p>
                 </div>
 
                 {/* Transaction Details */}
