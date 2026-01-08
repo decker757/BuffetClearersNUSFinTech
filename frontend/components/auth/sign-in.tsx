@@ -1,6 +1,10 @@
 import { useState } from 'react';
 import { Key, AlertCircle, Lock, Database } from 'lucide-react';
-import { validatePrivateKey, derivePublicKey } from '../../utils/xrpl-utils';
+import * as xrpl from 'xrpl';
+import { sign } from 'ripple-keypairs';
+import { toast } from 'sonner';
+
+const BACKEND_URL = 'http://localhost:6767';
 
 interface SignInProps {
   onSignIn: (publicKey: string) => void;
@@ -8,31 +12,82 @@ interface SignInProps {
 }
 
 export function SignIn({ onSignIn, onNavigateToDemoGenerator }: SignInProps) {
-  const [privateKey, setPrivateKey] = useState('');
+  const [seed, setSeed] = useState('');
   const [keyError, setKeyError] = useState('');
   const [isValidating, setIsValidating] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsValidating(true);
-    
-    const validation = validatePrivateKey(privateKey.trim());
-    
-    if (!validation.valid) {
-      setKeyError(validation.error || 'Invalid private key');
-      setIsValidating(false);
-      return;
-    }
+    setKeyError('');
 
-    // Derive public key from private key
-    // In production, use xrpl.js: const wallet = xrpl.Wallet.fromSeed(privateKey)
-    const publicKey = derivePublicKey(privateKey.trim());
-    
-    // Simulate validation delay
-    setTimeout(() => {
-      onSignIn(publicKey);
+    try {
+      // Validate seed format
+      if (!seed.trim().startsWith('s') || seed.trim().length < 25) {
+        setKeyError('Invalid seed format. Seeds should start with "s" and be at least 25 characters.');
+        setIsValidating(false);
+        return;
+      }
+
+      // Create wallet from seed
+      const wallet = xrpl.Wallet.fromSeed(seed.trim());
+
+      // Step 1: Request challenge from backend
+      const challengeResponse = await fetch(`${BACKEND_URL}/auth/challenge`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ address: wallet.address }),
+      });
+
+      if (!challengeResponse.ok) {
+        throw new Error('Failed to get authentication challenge');
+      }
+
+      const { challenge } = await challengeResponse.json();
+
+      // Step 2: Sign the challenge
+      // Convert string to hex using browser APIs
+      const encoder = new TextEncoder();
+      const messageBytes = encoder.encode(challenge);
+      const messageHex = Array.from(messageBytes)
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('')
+        .toUpperCase();
+      const signature = sign(messageHex, wallet.privateKey);
+
+      // Step 3: Verify signature and get JWT token
+      const verifyResponse = await fetch(`${BACKEND_URL}/auth/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          address: wallet.address,
+          publicKey: wallet.publicKey,
+          signature: signature,
+        }),
+      });
+
+      if (!verifyResponse.ok) {
+        throw new Error('Authentication failed');
+      }
+
+      const { token, address } = await verifyResponse.json();
+
+      // Store token in localStorage
+      localStorage.setItem('authToken', token);
+      localStorage.setItem('walletAddress', address);
+
+      toast.success('Authentication successful!');
+
+      // Call onSignIn with the wallet's public key (for compatibility with existing flow)
+      onSignIn(wallet.publicKey);
+
+    } catch (error) {
+      console.error('Sign in error:', error);
+      setKeyError(error instanceof Error ? error.message : 'Failed to sign in. Please try again.');
+      toast.error('Authentication failed. Please check your seed and try again.');
+    } finally {
       setIsValidating(false);
-    }, 500);
+    }
   };
 
   return (
@@ -54,33 +109,33 @@ export function SignIn({ onSignIn, onNavigateToDemoGenerator }: SignInProps) {
           <h1 className="text-4xl lg:text-5xl mb-4 text-white">
             Sign In to <span className="bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">InvoiceNFT</span>
           </h1>
-          <p className="text-xl text-gray-400 mb-4">Enter your XRP private key to continue</p>
-          
+          <p className="text-xl text-gray-400 mb-4">Enter your XRPL wallet seed to continue</p>
+
           <div className="max-w-2xl mx-auto p-3 bg-yellow-950/30 border border-yellow-900/50 rounded-lg">
             <p className="text-sm text-yellow-400">
-              <strong>Demo Mode:</strong> This platform uses XRP private keys for demonstration purposes. For production use, implement secure wallet integration and never share private keys.
+              <strong>Testnet Demo:</strong> Using cryptographic wallet authentication. Seed never leaves your browser.
             </p>
           </div>
         </div>
 
         <form onSubmit={handleSubmit} className="p-8 bg-gray-900 border border-gray-800 rounded-2xl">
           <div className="mb-6">
-            <label htmlFor="privateKey" className="block text-sm text-gray-400 mb-2">
-              XRP Private Key
+            <label htmlFor="seed" className="block text-sm text-gray-400 mb-2">
+              XRPL Wallet Seed
             </label>
             <div className="relative">
               <div className="absolute left-3 top-1/2 -translate-y-1/2">
                 <Key className="w-5 h-5 text-gray-500" />
               </div>
               <input
-                id="privateKey"
+                id="seed"
                 type="password"
-                value={privateKey}
+                value={seed}
                 onChange={(e) => {
-                  setPrivateKey(e.target.value);
+                  setSeed(e.target.value);
                   setKeyError('');
                 }}
-                placeholder="sXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+                placeholder="sEdV... (XRPL testnet seed)"
                 className="w-full pl-12 pr-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-600 transition-colors"
                 required
                 disabled={isValidating}
@@ -93,8 +148,8 @@ export function SignIn({ onSignIn, onNavigateToDemoGenerator }: SignInProps) {
               </div>
             )}
             <p className="mt-2 text-xs text-gray-500">
-              Your private key is used only to derive your public address and is never stored
-            </p>
+              Seed is used locally to sign authentication challenge. Never sent to the server.
+1            </p>
           </div>
 
           <button
@@ -111,11 +166,11 @@ export function SignIn({ onSignIn, onNavigateToDemoGenerator }: SignInProps) {
             </p>
             <div className="p-3 bg-blue-950/30 border border-blue-900/50 rounded-lg">
               <p className="text-xs text-blue-400 mb-1">
-                <strong>Demo Tip:</strong> Use any key starting with 's' (min 25 chars). Examples:
+                <strong>Demo Seeds:</strong> Use generated testnet seeds from your backend
               </p>
               <div className="flex flex-col gap-1 mt-2">
-                <code className="text-xs text-gray-400 font-mono">sTestKey123456789INVESTOR</code>
-                <code className="text-xs text-gray-400 font-mono">sTestKey123456789ESTABLISHMENT</code>
+                <code className="text-xs text-gray-400 font-mono">sEdVKBkyJYz1UzRy4o1xnZmsvRLeSFZ (Bakery)</code>
+                <code className="text-xs text-gray-400 font-mono">sEdVTLs4jiZh5EpUsvMBTX2yvLMW1M8 (Investor)</code>
               </div>
             </div>
           </div>
@@ -125,13 +180,13 @@ export function SignIn({ onSignIn, onNavigateToDemoGenerator }: SignInProps) {
         <div className="mt-6 p-4 bg-gray-900/50 border border-gray-800 rounded-lg">
           <h3 className="text-sm font-medium text-white mb-2 flex items-center gap-2">
             <Lock className="w-4 h-4 text-blue-400" />
-            Secure Authentication
+            Cryptographic Authentication
           </h3>
           <ul className="text-xs text-gray-400 space-y-1">
-            <li>• Private key is used to derive your public address</li>
-            <li>• Only your public key is stored in the system</li>
-            <li>• New users will complete a quick onboarding</li>
-            <li>• Returning users go straight to their dashboard</li>
+            <li>• Challenge-response authentication with cryptographic signatures</li>
+            <li>• Seed never leaves your browser - used only to sign challenges</li>
+            <li>• Backend verifies signature and issues JWT token (24h expiry)</li>
+            <li>• New users complete onboarding, returning users go to dashboard</li>
           </ul>
         </div>
 
