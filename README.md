@@ -197,7 +197,7 @@ No passwords. No custody. No personal data.
 ## Setup
 
 ### Prerequisites
-- Node.js 16+  
+- Node.js
 - Supabase account
 - OpenAI API key
 - XRPL Test Wallets 
@@ -297,7 +297,7 @@ npm run dev
 - Invoice factoring  
 - Future receivables sold by Establishments at discount for immediate cash
 - Investors earn returns by buying invoices below face value
-- Investors receive payment at maturity form Establishment that minted the NFT
+- Investors receive payment at maturity from Establishment that minted the NFT
 
 ---
 
