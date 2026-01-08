@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Filter, ChevronDown, TrendingUp, Clock, X, Calendar, FileText, Shield, DollarSign, Timer, AlertCircle } from 'lucide-react';
 import { UserRole } from './auth/onboarding';
-import { getActiveAuctionListings, placeBid, getBidsByUser, getBidsByAuction } from '../lib/database';
-import { AuctionListingWithNFT, AuctionBid } from '../lib/supabase';
+import { getActiveAuctionListings, placeBid, getBidCountsByAuctions } from '../lib/database';
+import { AuctionListingWithNFT } from '../lib/supabase';
 import { toast } from 'sonner';
 
 const categories = [
@@ -64,11 +64,8 @@ export function Marketplace({ userPublicKey, userRole }: { userPublicKey: string
       setAuctionListings(listings);
 
       // Load bid counts for each auction
-      const counts: Record<number, number> = {};
-      for (const listing of listings) {
-        const bids = await getBidsByAuction(listing.aid);
-        counts[listing.aid] = bids.length;
-      }
+      const aids = listings.map(l => l.aid);
+      const counts = await getBidCountsByAuctions(aids);
       setBidCounts(counts);
     } catch (error) {
       console.error('Failed to load auction listings:', error);

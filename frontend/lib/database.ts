@@ -215,36 +215,19 @@ export async function getActiveAuctionListings() {
   checkSupabaseConfig();
   const now = new Date().toISOString();
   
-  // First get auction listings
-  const { data: listings, error: listingsError } = await supabase
+  // Single query with JOIN
+  const { data: listings, error } = await supabase
     .from('AUCTIONLISTING')
-    .select('*')
+    .select(`
+      *,
+      NFTOKEN (*)
+    `)
     .gt('expiry', now)
     .order('time_created', { ascending: false });
 
-  if (listingsError) throw listingsError;
+  if (error) throw error;
   
-  // Then fetch NFT data for each listing
-  const listingsWithNFTs: AuctionListingWithNFT[] = [];
-  
-  for (const listing of listings || []) {
-    if (listing.nftoken_id) {
-      const { data: nft } = await supabase
-        .from('NFTOKEN')
-        .select('*')
-        .eq('nftoken_id', listing.nftoken_id)
-        .single();
-      
-      listingsWithNFTs.push({
-        ...listing,
-        NFTOKEN: nft || undefined
-      });
-    } else {
-      listingsWithNFTs.push(listing);
-    }
-  }
-  
-  return listingsWithNFTs;
+  return listings as AuctionListingWithNFT[];
 }
 
 export async function getAuctionListingsByCreator(publicKey: string) {
@@ -302,16 +285,26 @@ export async function placeBid(aid: number, bid_amount: number, bid_by: string) 
   return bidData as AuctionBid;
 }
 
-export async function getBidsByAuction(aid: number) {
+export async function getBidCountsByAuctions(aids: number[]) {
   checkSupabaseConfig();
+  
+  // Get counts grouped by aid
   const { data, error } = await supabase
     .from('AUCTIONBIDS')
-    .select('*')
-    .eq('aid', aid)
-    .order('created_at', { ascending: false });
+    .select('aid')
+    .in('aid', aids);
 
   if (error) throw error;
-  return data as AuctionBid[];
+  
+  // Aggregate counts
+  const counts: Record<number, number> = {};
+  aids.forEach(aid => counts[aid] = 0); // Initialize all to 0
+  
+  data?.forEach(bid => {
+    counts[bid.aid] = (counts[bid.aid] || 0) + 1;
+  });
+  
+  return counts;
 }
 
 export async function getBidsByUser(publicKey: string) {
